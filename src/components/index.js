@@ -128,7 +128,7 @@ export function SectionHeader({ title, action, onAction }) {
 
 // ─── Bottom Sheet Modal ─────────────────────
 
-export function BottomSheet({ visible, title, onClose, children }) {
+export function BottomSheet({ visible, title, onClose, children, footer }) {
   return (
     <RNModal
       visible={visible}
@@ -145,9 +145,14 @@ export function BottomSheet({ visible, title, onClose, children }) {
               <Text style={{ color: colors.textMuted, fontSize: 20 }}>✕</Text>
             </TouchableOpacity>
           </View>
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
             {children}
           </ScrollView>
+          {footer && (
+            <View style={styles.sheetFooter}>
+              {footer}
+            </View>
+          )}
         </Pressable>
       </Pressable>
     </RNModal>
@@ -271,5 +276,11 @@ const styles = StyleSheet.create({
     fontSize:   font.sizes.xl,
     fontWeight: font.weights.bold,
     color:      colors.text,
+  },
+  sheetFooter: {
+    paddingTop:   12,
+    borderTopWidth: 1,
+    borderColor:  colors.border,
+    marginTop:    4,
   },
 });

@@ -1,1 +1,33 @@
+# dependencies
+node_modules/
+
+# Expo
 .expo/
+.expo-shared/
+
+# build output
+dist/
+build/
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# environment variables (IMPORTANT)
+.env
+.env.*
+
+# Metro bundler cache
+.metro-cache/
+
+# Android / iOS build artifacts
+android/app/build/
+ios/build/
+
+# misc
+*.log

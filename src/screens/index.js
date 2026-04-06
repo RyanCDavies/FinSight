@@ -8,8 +8,9 @@ import {
   StyleSheet, Alert, FlatList, KeyboardAvoidingView,
   Platform, ActivityIndicator,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+import { File } from 'expo-file-system';
 import { colors, radius, spacing, font } from '../theme';
 import { Card, Btn, Input, Badge, ProgressBar, ScreenLoader, SectionHeader, BottomSheet, CategoryPill } from '../components';
 import {
@@ -110,7 +111,7 @@ export function DashboardScreen({ profile, navigation }) {
     setLoading(false);
   }, [profile.id]);
 
-  useEffect(() => { load(); }, [load]);
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   if (loading || !data) return <ScreenLoader />;
 
@@ -279,14 +280,45 @@ export function TransactionsScreen({ profile }) {
   useEffect(() => { load(); }, [load]);
 
   const handleSave = async () => {
-    if (editTx) {
-      await FinancialDataService.updateTransaction(editTx.id, { ...form, amount: parseFloat(form.amount) });
-    } else {
-      await FinancialDataService.addTransaction(profile.id, { ...form, amount: parseFloat(form.amount) });
+    // Validate required fields before saving
+    if (!form.date.trim()) {
+      Alert.alert('Missing Field', 'Please enter a date.');
+      return;
     }
-    setShowAdd(false); setEditTx(null);
-    setForm({ date: new Date().toISOString().slice(0, 10), merchant: '', amount: '', category_id: '', note: '' });
-    load();
+    if (!form.merchant.trim()) {
+      Alert.alert('Missing Field', 'Please enter a merchant name.');
+      return;
+    }
+    const parsedAmount = parseFloat(form.amount);
+    if (!form.amount.trim() || isNaN(parsedAmount)) {
+      Alert.alert('Invalid Amount', 'Please enter a valid number for the amount (e.g. -12.50).');
+      return;
+    }
+
+    // Confirm before committing to the database
+    const action = editTx ? 'Update' : 'Add';
+    const summary = `${form.merchant} · $${Math.abs(parsedAmount).toFixed(2)} · ${form.date}`;
+    Alert.alert(
+      `${action} Transaction`,
+      `Confirm ${action.toLowerCase()}:\n${summary}`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: action,
+          onPress: async () => {
+            if (editTx) {
+              await FinancialDataService.updateTransaction(editTx.id, { ...form, amount: parsedAmount });
+            } else {
+              await FinancialDataService.addTransaction(profile.id, { ...form, amount: parsedAmount });
+            }
+            setShowAdd(false);
+            setEditTx(null);
+            setForm({ date: new Date().toISOString().slice(0, 10), merchant: '', amount: '', category_id: '', note: '' });
+            load();
+          },
+        },
+      ]
+    );
   };
 
   const handleDelete = (id) => {
@@ -372,7 +404,17 @@ export function TransactionsScreen({ profile }) {
       )}
 
       {/* Add/Edit Sheet */}
-      <BottomSheet visible={showAdd} title={editTx ? 'Edit Transaction' : 'Add Transaction'} onClose={() => { setShowAdd(false); setEditTx(null); }}>
+      <BottomSheet
+        visible={showAdd}
+        title={editTx ? 'Edit Transaction' : 'Add Transaction'}
+        onClose={() => { setShowAdd(false); setEditTx(null); setForm({ date: new Date().toISOString().slice(0, 10), merchant: '', amount: '', category_id: '', note: '' }); }}
+        footer={
+          <View style={{ flexDirection: 'column', gap: 10 }}>
+            <Btn onPress={handleSave} fullWidth>{editTx ? 'Update' : 'Save'}</Btn>
+            <Btn variant="ghost" onPress={() => { setShowAdd(false); setEditTx(null); setForm({ date: new Date().toISOString().slice(0, 10), merchant: '', amount: '', category_id: '', note: '' }); }} fullWidth>Cancel</Btn>
+          </View>
+        }
+      >
         <Input label="Date (YYYY-MM-DD)" value={form.date} onChangeText={v => setForm(f => ({ ...f, date: v }))} placeholder="2025-01-15" />
         <Input label="Merchant" value={form.merchant} onChangeText={v => setForm(f => ({ ...f, merchant: v }))} placeholder="e.g. Starbucks" />
         <Input label="Amount (negative = expense)" value={form.amount} onChangeText={v => setForm(f => ({ ...f, amount: v }))} placeholder="-12.50" keyboardType="numeric" />
@@ -385,10 +427,6 @@ export function TransactionsScreen({ profile }) {
           ))}
         </ScrollView>
         <Input label="Note (optional)" value={form.note} onChangeText={v => setForm(f => ({ ...f, note: v }))} placeholder="Optional note" />
-        <View style={{ flexDirection: 'row', gap: 10 }}>
-          <Btn variant="ghost" onPress={() => { setShowAdd(false); setEditTx(null); }} fullWidth>Cancel</Btn>
-          <Btn onPress={handleSave} fullWidth>Save</Btn>
-        </View>
       </BottomSheet>
 
       {/* CSV Import Sheet */}
@@ -408,7 +446,7 @@ function CSVImportSheet({ profile, onClose }) {
   const pickFile = async () => {
     const res = await DocumentPicker.getDocumentAsync({ type: 'text/comma-separated-values', copyToCacheDirectory: true });
     if (res.canceled) return;
-    const text   = await FileSystem.readAsStringAsync(res.assets[0].uri);
+    const text   = await new File(res.assets[0].uri).text();
     const parsed = ImportIntegrationService.parseCSV(text);
     if (parsed.error) { Alert.alert('Error', parsed.error); return; }
     const h = parsed.headers;
@@ -554,7 +592,17 @@ export function BudgetManagerScreen({ profile }) {
         })}
       </ScrollView>
 
-      <BottomSheet visible={showAdd} title="Set Budget" onClose={() => setShowAdd(false)}>
+      <BottomSheet
+        visible={showAdd}
+        title="Set Budget"
+        onClose={() => setShowAdd(false)}
+        footer={
+          <View style={{ flexDirection: 'column', gap: 10 }}>
+            <Btn onPress={handleSave} disabled={!form.category_id || !form.limit} fullWidth>Save Budget</Btn>
+            <Btn variant="ghost" onPress={() => setShowAdd(false)} fullWidth>Cancel</Btn>
+          </View>
+        }
+      >
         <Text style={styles.inputLabel}>Category</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }} contentContainerStyle={{ gap: 8 }}>
           {categories.map(c => (
@@ -564,10 +612,6 @@ export function BudgetManagerScreen({ profile }) {
           ))}
         </ScrollView>
         <Input label={`Monthly limit for ${now.toLocaleString('default', { month: 'long' })}`} value={form.limit} onChangeText={v => setForm(f => ({ ...f, limit: v }))} placeholder="500" keyboardType="numeric" icon="💰" />
-        <View style={{ flexDirection: 'row', gap: 10 }}>
-          <Btn variant="ghost" onPress={() => setShowAdd(false)} fullWidth>Cancel</Btn>
-          <Btn onPress={handleSave} disabled={!form.category_id || !form.limit} fullWidth>Save Budget</Btn>
-        </View>
       </BottomSheet>
     </View>
   );

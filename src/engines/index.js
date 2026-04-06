@@ -151,10 +151,14 @@ export const RecommendationEngine = {
 
 export const SubscriptionEngine = {
   detect(transactions) {
+    const EXCLUDED_CATEGORIES = ['cat_income', 'cat_food', 'cat_transport'];
     const merchants = {};
     transactions.forEach(t => {
-      const key = (t.merchant || '').toLowerCase().trim();
       const amt = parseFloat(t.amount);
+      // Only expenses (negative amounts); exclude income, food & dining, and transportation
+      if (amt >= 0) return;
+      if (EXCLUDED_CATEGORIES.includes(t.category_id)) return;
+      const key = (t.merchant || '').toLowerCase().trim();
       if (!merchants[key]) merchants[key] = { amounts: [], dates: [] };
       merchants[key].amounts.push(amt);
       merchants[key].dates.push(t.date);
