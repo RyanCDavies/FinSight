@@ -1,60 +1,63 @@
-// App.js
-// Root App — Navigation + Session Management
-
-import React, { useState, useEffect } from 'react';
-import { View, Text, ActivityIndicator } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Platform, StatusBar, Text, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
-import { useFonts, SpaceGrotesk_400Regular, SpaceGrotesk_500Medium, SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { getDB, getSession } from './src/db/database';
 import { colors } from './src/theme';
 import {
-  AuthScreen,
-  DashboardScreen,
-  TransactionsScreen,
-  BudgetManagerScreen,
   AssistantScreen,
+  AuthScreen,
+  BudgetManagerScreen,
+  DashboardScreen,
   ProfileScreen,
+  TransactionsScreen,
 } from './src/screens';
 
 const Tab = createBottomTabNavigator();
+const isWindows = Platform.OS === 'windows';
+const headerTitleStyle = isWindows
+  ? { fontSize: 18 }
+  : { fontFamily: 'SpaceGrotesk_700Bold', fontSize: 18 };
+const tabBarLabelStyle = isWindows
+  ? { fontSize: 10 }
+  : { fontSize: 10, fontFamily: 'SpaceGrotesk_600SemiBold' };
+const icons = {
+  Dashboard: 'D',
+  Transactions: 'T',
+  Budgets: 'B',
+  'AI Assistant': 'AI',
+  Profile: 'P',
+};
 
 export default function App() {
-  const [profile,  setProfile]  = useState(null);
-  const [booting,  setBooting]  = useState(true);
+  const [profile, setProfile] = useState(null);
+  const [booting, setBooting] = useState(true);
 
-  const [fontsLoaded] = useFonts({
-    SpaceGrotesk_400Regular,
-    SpaceGrotesk_500Medium,
-    SpaceGrotesk_600SemiBold,
-    SpaceGrotesk_700Bold,
-  });
-
-  // Boot: init DB + restore session
   useEffect(() => {
     (async () => {
       try {
-        await getDB(); // initializes schema + seeds categories
+        await getDB();
         const profileId = await getSession();
         if (profileId) {
           const db = await getDB();
-          const p  = await db.getFirstAsync('SELECT * FROM profiles WHERE id = ?', [profileId]);
-          if (p) setProfile(p);
+          const existingProfile = await db.getFirstAsync('SELECT * FROM profiles WHERE id = ?', [profileId]);
+          if (existingProfile) {
+            setProfile(existingProfile);
+          }
         }
-      } catch (e) {
-        console.warn('Boot error:', e);
+      } catch (error) {
+        console.warn('Boot error:', error);
       }
       setBooting(false);
     })();
   }, []);
 
-  if (booting || !fontsLoaded) {
+  if (booting) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' }}>
-        <Text style={{ fontSize: 52, marginBottom: 16 }}>💎</Text>
+        <Text style={{ fontSize: 40, marginBottom: 16, color: colors.text }}>FinSight</Text>
         <ActivityIndicator color={colors.accent} />
       </View>
     );
@@ -63,7 +66,7 @@ export default function App() {
   if (!profile) {
     return (
       <SafeAreaProvider>
-        <StatusBar style="light" />
+        <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
         <AuthScreen onLogin={setProfile} />
       </SafeAreaProvider>
     );
@@ -71,44 +74,47 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <StatusBar style="light" />
+      <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
       <NavigationContainer theme={{ colors: { background: colors.bg } }}>
         <Tab.Navigator
           screenOptions={({ route }) => ({
-            headerStyle:      { backgroundColor: colors.surface, borderBottomColor: colors.border, borderBottomWidth: 1 },
-            headerTintColor:  colors.text,
-            headerTitleStyle: { fontFamily: 'SpaceGrotesk_700Bold', fontSize: 18 },
-            tabBarStyle:      { backgroundColor: colors.surface, borderTopColor: colors.border, borderTopWidth: 1, height: 60, paddingBottom: 8 },
-            tabBarActiveTintColor:   colors.accent,
+            headerStyle: { backgroundColor: colors.surface, borderBottomColor: colors.border, borderBottomWidth: 1 },
+            headerTintColor: colors.text,
+            headerTitleStyle,
+            tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border, borderTopWidth: 1, height: 60, paddingBottom: 8 },
+            tabBarActiveTintColor: colors.accent,
             tabBarInactiveTintColor: colors.textMuted,
-            tabBarLabelStyle: { fontSize: 10, fontFamily: 'SpaceGrotesk_600SemiBold' },
-            tabBarIcon: ({ focused }) => {
-              const icons = { Dashboard: '📊', Transactions: '💳', Budgets: '🎯', 'AI Assistant': '🤖', Profile: '👤' };
-              return <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.5 }}>{icons[route.name]}</Text>;
-            },
+            tabBarLabelStyle,
+            tabBarIcon: ({ focused }) => (
+              <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.5, color: focused ? colors.accent : colors.textMuted }}>
+                {icons[route.name]}
+              </Text>
+            ),
           })}
         >
           <Tab.Screen name="Dashboard">
-            {props => <DashboardScreen {...props} profile={profile} />}
+            {(props) => <DashboardScreen {...props} profile={profile} />}
           </Tab.Screen>
-
           <Tab.Screen name="Transactions">
-            {props => <TransactionsScreen {...props} profile={profile} />}
+            {(props) => <TransactionsScreen {...props} profile={profile} />}
           </Tab.Screen>
-
           <Tab.Screen name="Budgets">
-            {props => <BudgetManagerScreen {...props} profile={profile} />}
+            {(props) => <BudgetManagerScreen {...props} profile={profile} />}
           </Tab.Screen>
-
           <Tab.Screen name="AI Assistant">
-            {props => <AssistantScreen {...props} profile={profile} />}
+            {(props) => <AssistantScreen {...props} profile={profile} />}
           </Tab.Screen>
-
           <Tab.Screen name="Profile">
-            {props => <ProfileScreen {...props} profile={profile} onLogout={() => {
-              import('./src/db/database').then(({ clearSession }) => clearSession());
-              setProfile(null);
-            }} />}
+            {(props) => (
+              <ProfileScreen
+                {...props}
+                profile={profile}
+                onLogout={() => {
+                  import('./src/db/database').then(({ clearSession }) => clearSession());
+                  setProfile(null);
+                }}
+              />
+            )}
           </Tab.Screen>
         </Tab.Navigator>
       </NavigationContainer>

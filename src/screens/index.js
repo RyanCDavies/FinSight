@@ -9,8 +9,6 @@ import {
   Platform, ActivityIndicator,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import * as DocumentPicker from 'expo-document-picker';
-import { File } from 'expo-file-system';
 import { colors, radius, spacing, font } from '../theme';
 import { Card, Btn, Input, Badge, ProgressBar, ScreenLoader, SectionHeader, BottomSheet, CategoryPill } from '../components';
 import {
@@ -19,6 +17,9 @@ import {
 } from '../services';
 import { AgenticAssistant } from '../engines';
 import { saveSession, clearSession, getDB } from '../db/database';
+import { emitDataChanged, subscribeToDataChanges } from '../db/changeEvents';
+import { addCsvDropListener, pickCsvTextAsync, setCsvDropEnabled } from '../platform/csvImport';
+import { getItemAsync, setItemAsync } from '../platform/secureStore';
 
 // ─────────────────────────────────────────────
 // Auth Screen
@@ -112,6 +113,8 @@ export function DashboardScreen({ profile, navigation }) {
   }, [profile.id]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  useEffect(() => subscribeToDataChanges(load), [load]);
 
   if (loading || !data) return <ScreenLoader />;
 
@@ -278,6 +281,7 @@ export function TransactionsScreen({ profile }) {
   }, [profile.id, search, filterCat]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => subscribeToDataChanges(load), [load]);
 
   const handleSave = async () => {
     // Validate required fields before saving
@@ -443,21 +447,34 @@ function CSVImportSheet({ profile, onClose }) {
   const [mapping, setMapping] = useState({ date: '', merchant: '', amount: '', note: '' });
   const [result,  setResult]  = useState(null);
 
-  const pickFile = async () => {
-    const res = await DocumentPicker.getDocumentAsync({ type: 'text/comma-separated-values', copyToCacheDirectory: true });
-    if (res.canceled) return;
-    const text   = await new File(res.assets[0].uri).text();
+  const loadCsvText = (text) => {
     const parsed = ImportIntegrationService.parseCSV(text);
     if (parsed.error) { Alert.alert('Error', parsed.error); return; }
-    const h = parsed.headers;
+    const headers = parsed.headers;
+    const lowerHeaders = headers.map(h => h.toLowerCase());
+    const matchHeader = (...terms) => {
+      const index = lowerHeaders.findIndex(header => terms.some(term => header.includes(term)));
+      return index >= 0 ? headers[index] : '';
+    };
+
     setCsvData(parsed);
     setMapping({
-      date:     h.find(x => x.includes('date')) || h[0] || '',
-      merchant: h.find(x => x.includes('merchant') || x.includes('description') || x.includes('payee')) || h[1] || '',
-      amount:   h.find(x => x.includes('amount') || x.includes('debit') || x.includes('credit')) || h[2] || '',
-      note:     h.find(x => x.includes('note') || x.includes('memo')) || '',
+      date:     matchHeader('date') || headers[0] || '',
+      merchant: matchHeader('merchant', 'description', 'payee') || headers[1] || '',
+      amount:   matchHeader('amount', 'debit', 'credit') || headers[2] || '',
+      note:     matchHeader('note', 'memo') || '',
     });
     setStep('map');
+  };
+
+  const pickFile = async () => {
+    try {
+      const file = await pickCsvTextAsync();
+      if (!file) return;
+      loadCsvText(file.text);
+    } catch (error) {
+      Alert.alert('CSV import unavailable', 'Unable to open the CSV file picker.');
+    }
   };
 
   const handleImport = async () => {
@@ -466,13 +483,27 @@ function CSVImportSheet({ profile, onClose }) {
     setResult(r); setStep('done');
   };
 
+  useEffect(() => {
+    if (Platform.OS !== 'windows') return undefined;
+
+    setCsvDropEnabled(true);
+    const subscription = addCsvDropListener((file) => {
+      if (file?.text) loadCsvText(file.text);
+    });
+
+    return () => {
+      subscription?.remove?.();
+      setCsvDropEnabled(false);
+    };
+  }, []);
+
   return (
     <BottomSheet visible title="Import CSV" onClose={onClose}>
       {step === 'upload' && (
         <TouchableOpacity onPress={pickFile} style={styles.dropZone}>
           <Text style={{ fontSize: 40, marginBottom: 8 }}>📁</Text>
-          <Text style={styles.dropZoneText}>Tap to select CSV file</Text>
-          <Text style={styles.dropZoneSub}>Bank exports and statement CSVs supported</Text>
+          <Text style={styles.dropZoneText}>{Platform.OS === 'windows' ? 'Click or drag a CSV file here' : 'Tap to select CSV file'}</Text>
+          <Text style={styles.dropZoneSub}>{Platform.OS === 'windows' ? 'Bank exports and statement CSVs can be selected or dropped into this window' : 'Bank exports and statement CSVs supported'}</Text>
         </TouchableOpacity>
       )}
 
@@ -533,6 +564,7 @@ export function BudgetManagerScreen({ profile }) {
   };
 
   useEffect(() => { load(); }, []);
+  useEffect(() => subscribeToDataChanges(load), [profile.id, month, year]);
 
   const handleSave = async () => {
     await BudgetingGoalService.setBudget(profile.id, form.category_id, month, year, parseFloat(form.limit));
@@ -644,14 +676,29 @@ export function AssistantScreen({ profile }) {
     });
 
     // Load saved API key
-    import('expo-secure-store').then(SS => {
-      SS.getItemAsync('anthropic_api_key').then(k => { if (k) setApiKey(k); else setShowKey(true); });
-    });
+    getItemAsync('anthropic_api_key').then(k => { if (k) setApiKey(k); else setShowKey(true); });
+  }, [profile.id]);
+
+  useEffect(() => {
+    const reloadContext = () => {
+      ReportingAnalyticsService.getDashboardData(profile.id).then(d => {
+        setContext({
+          summary:         `Spent: $${d.totalSpend.toFixed(2)}, Income: $${d.totalIncome.toFixed(2)}`,
+          totalSpend:      d.totalSpend,
+          totalIncome:     d.totalIncome,
+          spendByCategory: Object.fromEntries(Object.entries(d.spendByCategory).map(([k, v]) => [d.cats.find(c => c.id === k)?.name || k, v])),
+          budgets:         d.budgets.map(b => ({ category: d.cats.find(c => c.id === b.category_id)?.name, limit: b.limit_amount, spent: b.spent })),
+          anomalies:       d.anomalies.map(a => a.description),
+          subscriptions:   d.subscriptions,
+        });
+      });
+    };
+
+    return subscribeToDataChanges(reloadContext);
   }, [profile.id]);
 
   const saveApiKey = async (key) => {
-    const SS = await import('expo-secure-store');
-    await SS.setItemAsync('anthropic_api_key', key);
+    await setItemAsync('anthropic_api_key', key);
     setApiKey(key); setShowKey(false);
   };
 
@@ -737,13 +784,18 @@ export function ProfileScreen({ profile, onLogout }) {
   const [stats, setStats] = useState({ txCount: 0, budgetCount: 0 });
 
   useEffect(() => {
-    getDB().then(async db => {
-      const [{ c: txCount }, { c: budgetCount }] = await Promise.all([
-        db.getFirstAsync('SELECT COUNT(*) as c FROM transactions WHERE profile_id = ?', [profile.id]),
-        db.getFirstAsync('SELECT COUNT(*) as c FROM budgets WHERE profile_id = ?', [profile.id]),
-      ]);
-      setStats({ txCount, budgetCount });
-    });
+    const loadStats = () => {
+      getDB().then(async db => {
+        const [{ c: txCount }, { c: budgetCount }] = await Promise.all([
+          db.getFirstAsync('SELECT COUNT(*) as c FROM transactions WHERE profile_id = ?', [profile.id]),
+          db.getFirstAsync('SELECT COUNT(*) as c FROM budgets WHERE profile_id = ?', [profile.id]),
+        ]);
+        setStats({ txCount, budgetCount });
+      });
+    };
+
+    loadStats();
+    return subscribeToDataChanges(loadStats);
   }, [profile.id]);
 
   const clearData = () => {
@@ -753,6 +805,7 @@ export function ProfileScreen({ profile, onLogout }) {
         const db = await getDB();
         await db.runAsync('DELETE FROM transactions WHERE profile_id = ?', [profile.id]);
         await db.runAsync('DELETE FROM budgets WHERE profile_id = ?', [profile.id]);
+        emitDataChanged();
         Alert.alert('Done', 'All financial data cleared.');
       }},
     ]);
@@ -788,12 +841,15 @@ export function ProfileScreen({ profile, onLogout }) {
       <Card style={{ marginBottom: 16 }}>
         <SectionHeader title="Privacy & Security" />
         {privacyItems.map((item, i) => (
-          <View key={i} style={[styles.recRow, i < privacyItems.length - 1 && styles.divider]}>
-            <Text style={{ fontSize: 20 }}>{item.icon}</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.catName}>{item.title}</Text>
-              <Text style={styles.txMeta}>{item.desc}</Text>
+          <View key={i}>
+            <View style={styles.privacyRow}>
+              <Text style={styles.privacyIcon}>{item.icon}</Text>
+              <View style={styles.privacyTextWrap}>
+                <Text style={styles.privacyTitle}>{item.title}</Text>
+                <Text style={styles.privacyDesc}>{item.desc}</Text>
+              </View>
             </View>
+            {i < privacyItems.length - 1 && <View style={styles.divider} />}
           </View>
         ))}
       </Card>
@@ -865,6 +921,11 @@ const styles = StyleSheet.create({
   catAmt:            { fontSize: font.sizes.sm, fontWeight: font.weights.bold, color: colors.text },
   pctLabel:          { fontSize: font.sizes.xs, color: colors.textMuted, minWidth: 32, textAlign: 'right' },
   recRow:            { flexDirection: 'row', gap: 10, paddingVertical: 10, alignItems: 'flex-start' },
+  privacyRow:        { flexDirection: 'row', gap: 10, paddingVertical: 10, alignItems: 'flex-start' },
+  privacyIcon:       { fontSize: 20, lineHeight: 24, marginTop: 1 },
+  privacyTextWrap:   { flex: 1, minWidth: 0, flexShrink: 1 },
+  privacyTitle:      { fontSize: font.sizes.sm, fontWeight: font.weights.medium, color: colors.text, flexShrink: 1 },
+  privacyDesc:       { fontSize: font.sizes.xs, color: colors.textMuted, marginTop: 4, lineHeight: Platform.OS === 'windows' ? 18 : 16, flexShrink: 1 },
   recText:           { flex: 1, fontSize: font.sizes.sm, color: colors.textSecondary, lineHeight: 20 },
   subRow:            { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 },
   subMerchant:       { fontSize: font.sizes.sm, fontWeight: font.weights.medium, color: colors.text, textTransform: 'capitalize' },

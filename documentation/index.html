@@ -1,0 +1,2441 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>FinSight — Interactive Storyboard Prototype</title>
+  <style>
+    :root{
+      --bg:#0b1220;
+      --card:#111a2e;
+      --card2:#0f1730;
+      --text:#e8eeff;
+      --muted:#a8b3d6;
+      --line:rgba(255,255,255,.10);
+      --accent:#6ea8ff;
+      --good:#49d17a;
+      --warn:#ffcc66;
+      --bad:#ff6b7a;
+      --shadow: 0 18px 45px rgba(0,0,0,.35);
+      --r:18px;
+      --r2:14px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    }
+    *{ box-sizing:border-box; }
+    html,body{ height:100%; }
+    body{
+      margin:0;
+      font-family: var(--sans);
+      background:
+        radial-gradient(1200px 600px at 15% 10%, rgba(110,168,255,.18), transparent 55%),
+        radial-gradient(900px 500px at 85% 20%, rgba(73,209,122,.12), transparent 55%),
+        radial-gradient(900px 700px at 50% 90%, rgba(255,204,102,.10), transparent 60%),
+        var(--bg);
+      color:var(--text);
+    }
+
+    /* Layout */
+    .app{
+      display:grid;
+      grid-template-columns: 280px 1fr;
+      min-height:100vh;
+    }
+    .sidebar{
+      padding:18px 14px;
+      border-right:1px solid var(--line);
+      background: linear-gradient(180deg, rgba(17,26,46,.92), rgba(11,18,32,.82));
+      position:sticky;
+      top:0;
+      height:100vh;
+      overflow:auto;
+    }
+    .brand{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:10px 10px 14px 10px;
+    }
+    .logo{
+      width:38px;height:38px;border-radius:12px;
+      background: radial-gradient(circle at 30% 30%, rgba(110,168,255,.95), rgba(110,168,255,.25));
+      box-shadow: 0 10px 25px rgba(110,168,255,.22);
+      position:relative;
+    }
+    .logo:after{
+      content:"";
+      position:absolute; inset:10px;
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,.28);
+      background: rgba(0,0,0,.10);
+    }
+    .brand h1{
+      font-size:16px;
+      margin:0;
+      line-height:1.1;
+      letter-spacing:.2px;
+    }
+    .brand .sub{
+      display:block;
+      font-size:12px;
+      color:var(--muted);
+      margin-top:2px;
+    }
+
+    .nav{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      padding:10px;
+    }
+    .nav button{
+      width:100%;
+      text-align:left;
+      padding:10px 10px;
+      border-radius:12px;
+      border:1px solid transparent;
+      background:transparent;
+      color:var(--text);
+      cursor:pointer;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:10px;
+      transition: .15s ease;
+    }
+    .nav button:hover{ background: rgba(255,255,255,.05); }
+    .nav button.active{
+      background: rgba(110,168,255,.14);
+      border-color: rgba(110,168,255,.35);
+      box-shadow: 0 10px 22px rgba(110,168,255,.08);
+    }
+    .pill{
+      font-size:11px;
+      padding:2px 8px;
+      border-radius:999px;
+      border:1px solid var(--line);
+      color:var(--muted);
+    }
+    .pill.bad{ border-color: rgba(255,107,122,.35); color: #ffb3bb; }
+    .pill.good{ border-color: rgba(73,209,122,.35); color: #baf4cd; }
+    .pill.warn{ border-color: rgba(255,204,102,.40); color: #ffe3aa; }
+
+    .sideFooter{
+      padding:10px;
+      margin-top:12px;
+      border-top:1px solid var(--line);
+    }
+    .miniCard{
+      padding:12px;
+      border-radius:14px;
+      background: rgba(255,255,255,.04);
+      border:1px solid var(--line);
+    }
+    .miniTitle{ font-size:12px; color:var(--muted); }
+    .miniValue{ font-size:14px; margin-top:6px; display:flex; gap:8px; align-items:center; }
+    .dot{ width:8px; height:8px; border-radius:50%; background: var(--good); box-shadow: 0 0 0 4px rgba(73,209,122,.12); }
+
+    .main{
+      padding:18px 18px 40px 18px;
+      max-width: 1180px;
+    }
+
+    /* Top bar */
+    .topbar{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:12px;
+      padding:10px 12px;
+      border-radius:18px;
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.03);
+      box-shadow: var(--shadow);
+      margin-bottom:16px;
+    }
+    .crumb{
+      display:flex; align-items:center; gap:10px;
+    }
+    .crumb .title{
+      font-size:15px; font-weight:600;
+    }
+    .crumb .desc{
+      font-size:12px; color:var(--muted);
+    }
+    .actions{
+      display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+    }
+    .btn{
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.03);
+      color: var(--text);
+      padding:9px 12px;
+      border-radius:12px;
+      cursor:pointer;
+      transition:.15s ease;
+      font-size:13px;
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      user-select:none;
+    }
+    .btn:hover{ transform: translateY(-1px); background: rgba(255,255,255,.05); }
+    .btn.primary{
+      background: rgba(110,168,255,.18);
+      border-color: rgba(110,168,255,.38);
+    }
+    .btn.good{
+      background: rgba(73,209,122,.16);
+      border-color: rgba(73,209,122,.35);
+    }
+    .btn.warn{
+      background: rgba(255,204,102,.16);
+      border-color: rgba(255,204,102,.35);
+    }
+    .btn.bad{
+      background: rgba(255,107,122,.14);
+      border-color: rgba(255,107,122,.35);
+    }
+    .btn.ghost{
+      background: transparent;
+    }
+    .kbd{
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 2px 6px;
+      border:1px solid var(--line);
+      border-bottom-color: rgba(255,255,255,.16);
+      border-radius:8px;
+      color: var(--muted);
+    }
+
+    /* Cards + grids */
+    .grid{
+      display:grid;
+      grid-template-columns: 1.3fr 1fr;
+      gap:14px;
+    }
+    .grid3{
+      display:grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap:14px;
+    }
+    .card{
+      border:1px solid var(--line);
+      border-radius: var(--r);
+      background: rgba(255,255,255,.03);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .cardHeader{
+      padding:14px 14px 10px 14px;
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:12px;
+      border-bottom:1px solid rgba(255,255,255,.06);
+      background: linear-gradient(180deg, rgba(255,255,255,.04), transparent);
+    }
+    .cardHeader h3{
+      margin:0;
+      font-size:14px;
+      font-weight:650;
+      letter-spacing:.2px;
+    }
+    .cardHeader p{
+      margin:6px 0 0 0;
+      font-size:12px;
+      color:var(--muted);
+      line-height:1.35;
+    }
+    .cardBody{ padding:14px; }
+    .stat{
+      display:flex; flex-direction:column; gap:6px;
+      padding:12px;
+      border-radius:16px;
+      border:1px solid rgba(255,255,255,.08);
+      background: rgba(17,26,46,.35);
+    }
+    .stat .k{ color:var(--muted); font-size:12px; }
+    .stat .v{ font-size:18px; font-weight:700; letter-spacing:.2px; }
+    .stat .hint{ font-size:12px; color:var(--muted); }
+
+    /* Simple chart bars */
+    .bars{
+      display:flex; align-items:flex-end; gap:10px;
+      height:120px;
+      padding:10px;
+      border-radius:16px;
+      border:1px solid rgba(255,255,255,.08);
+      background: rgba(17,26,46,.22);
+    }
+    .bar{
+      flex:1;
+      border-radius:12px 12px 8px 8px;
+      background: rgba(110,168,255,.22);
+      border:1px solid rgba(110,168,255,.35);
+      position:relative;
+      min-width: 28px;
+      transition: .2s ease;
+    }
+    .bar:hover{ transform: translateY(-2px); }
+    .bar span{
+      position:absolute;
+      bottom: -20px;
+      left:50%;
+      transform: translateX(-50%);
+      font-size:11px;
+      color: var(--muted);
+      white-space:nowrap;
+    }
+
+    /* Table */
+    table{
+      width:100%;
+      border-collapse:collapse;
+      font-size:13px;
+    }
+    th, td{
+      text-align:left;
+      padding:10px 8px;
+      border-bottom:1px solid rgba(255,255,255,.06);
+      vertical-align:top;
+    }
+    th{
+      color:var(--muted);
+      font-weight:600;
+      font-size:12px;
+    }
+    tr:hover td{ background: rgba(255,255,255,.02); }
+    .tag{
+      font-size:11px;
+      padding:3px 8px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.10);
+      color: var(--muted);
+      display:inline-flex;
+      gap:6px;
+      align-items:center;
+    }
+    .tag.good{ border-color: rgba(73,209,122,.35); color:#baf4cd; }
+    .tag.warn{ border-color: rgba(255,204,102,.35); color:#ffe3aa; }
+    .tag.bad{ border-color: rgba(255,107,122,.35); color:#ffb3bb; }
+
+    /* Forms */
+    .row{ display:flex; gap:10px; flex-wrap:wrap; }
+    .field{
+      display:flex; flex-direction:column; gap:6px;
+      flex: 1;
+      min-width: 160px;
+    }
+    label{ font-size:12px; color:var(--muted); }
+    input, select, textarea{
+      background: rgba(17,26,46,.40);
+      border:1px solid rgba(255,255,255,.10);
+      color: var(--text);
+      border-radius: 12px;
+      padding:10px 10px;
+      outline:none;
+      font-size:13px;
+    }
+    textarea{ resize: vertical; min-height: 88px; }
+    input:focus, select:focus, textarea:focus{
+      border-color: rgba(110,168,255,.45);
+      box-shadow: 0 0 0 4px rgba(110,168,255,.12);
+    }
+    .help{ font-size:12px; color:var(--muted); line-height:1.4; }
+
+    /* Screen transitions */
+    .screen{
+      display:none;
+      animation: fadeIn .18s ease;
+    }
+    .screen.active{ display:block; }
+    @keyframes fadeIn{
+      from{ opacity:0; transform: translateY(4px); }
+      to{ opacity:1; transform: translateY(0); }
+    }
+
+    /* Modals */
+    .overlay{
+      position:fixed; inset:0;
+      background: rgba(0,0,0,.52);
+      backdrop-filter: blur(6px);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+      z-index:50;
+    }
+    .overlay.show{ display:flex; }
+    .modal{
+      width:min(780px, 100%);
+      border-radius: 22px;
+      border:1px solid rgba(255,255,255,.12);
+      background: linear-gradient(180deg, rgba(17,26,46,.95), rgba(11,18,32,.92));
+      box-shadow: 0 30px 80px rgba(0,0,0,.55);
+      overflow:hidden;
+    }
+    .modalHead{
+      padding:14px 16px;
+      border-bottom:1px solid rgba(255,255,255,.08);
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:10px;
+    }
+    .modalHead h3{ margin:0; font-size:14px; }
+    .modalHead p{ margin:6px 0 0 0; font-size:12px; color:var(--muted); }
+    .modalBody{ padding:14px 16px 16px 16px; }
+    .modalFoot{
+      padding:12px 16px;
+      border-top:1px solid rgba(255,255,255,.08);
+      display:flex;
+      justify-content:flex-end;
+      gap:8px;
+    }
+
+    /* Locked overlay (login/decrypt) */
+    .lockShell{
+      position:fixed; inset:0; z-index:80;
+      display:none;
+      background:
+        radial-gradient(900px 600px at 30% 20%, rgba(110,168,255,.20), transparent 60%),
+        radial-gradient(900px 700px at 70% 80%, rgba(73,209,122,.14), transparent 60%),
+        rgba(0,0,0,.62);
+      backdrop-filter: blur(10px);
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+    }
+    .lockShell.show{ display:flex; }
+    .lockCard{
+      width:min(760px, 100%);
+      border-radius: 26px;
+      border:1px solid rgba(255,255,255,.14);
+      background: linear-gradient(180deg, rgba(17,26,46,.92), rgba(11,18,32,.90));
+      box-shadow: 0 35px 90px rgba(0,0,0,.6);
+      overflow:hidden;
+    }
+    .lockTop{
+      padding:18px 18px 12px 18px;
+      border-bottom:1px solid rgba(255,255,255,.08);
+      display:flex;
+      align-items:flex-start;
+      gap:12px;
+    }
+    .lockTop .badge{
+      width:44px;height:44px;border-radius:16px;
+      background: rgba(110,168,255,.18);
+      border:1px solid rgba(110,168,255,.35);
+      display:flex; align-items:center; justify-content:center;
+      font-family: var(--mono);
+      color:#cfe2ff;
+    }
+    .lockTop h2{ margin:0; font-size:18px; }
+    .lockTop p{ margin:6px 0 0 0; color:var(--muted); font-size:12px; line-height:1.35; }
+    .lockBody{ padding:16px 18px; }
+    .split{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:14px;
+    }
+    .note{
+      padding:12px;
+      border-radius: 16px;
+      border:1px dashed rgba(255,255,255,.16);
+      background: rgba(255,255,255,.03);
+      font-size:12px;
+      color:var(--muted);
+      line-height:1.45;
+    }
+    .note b{ color: var(--text); }
+
+    /* Responsive */
+    @media (max-width: 980px){
+      .app{ grid-template-columns: 1fr; }
+      .sidebar{ position:relative; height:auto; }
+      .grid{ grid-template-columns: 1fr; }
+      .grid3{ grid-template-columns: 1fr; }
+      .split{ grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="lockShell show" id="lockShell" aria-hidden="false">
+    <div class="lockCard">
+      <div class="lockTop">
+        <div class="badge">🔐</div>
+        <div>
+          <h2>Welcome to FinSight</h2>
+          <p>
+            Storyboard prototype only: no backend, no bank APIs, no external account login.
+            Authenticate to “unlock/decrypt” your locally stored data (simulated).
+          </p>
+        </div>
+      </div>
+      <div class="lockBody">
+        <div class="split">
+          <div class="card" style="background: rgba(255,255,255,.02); box-shadow:none;">
+            <div class="cardHeader">
+              <div>
+                <h3>1) Authenticate</h3>
+                <p>UX-only login so the user can access decrypted local data.</p>
+              </div>
+              <span class="pill">Mock</span>
+            </div>
+            <div class="cardBody">
+              <div class="row">
+                <div class="field">
+                  <label>Email</label>
+                  <input id="authEmail" placeholder="student@example.com" />
+                </div>
+                <div class="field">
+                  <label>Password</label>
+                  <input id="authPass" placeholder="••••••••" type="password" />
+                </div>
+              </div>
+              <div style="height:10px;"></div>
+              <button class="btn primary" id="btnAuth">Authenticate</button>
+              <p class="help" style="margin-top:10px;">Tip: any values work. This prototype doesn’t store credentials.</p>
+            </div>
+          </div>
+
+          <div class="card" style="background: rgba(255,255,255,.02); box-shadow:none;">
+            <div class="cardHeader">
+              <div>
+                <h3>2) Decrypt Local Vault</h3>
+                <p>Simulates unlocking encrypted local data after authentication.</p>
+              </div>
+              <span class="pill">Mock</span>
+            </div>
+            <div class="cardBody">
+              <div class="row">
+                <div class="field">
+                  <label>Vault Passphrase</label>
+                  <input id="vaultPhrase" placeholder="my local passphrase" type="password" />
+                </div>
+              </div>
+              <div style="height:10px;"></div>
+              <button class="btn good" id="btnDecrypt">Unlock & Enter App</button>
+              <div style="height:10px;"></div>
+              <div class="note">
+                <b>Privacy-first assumption:</b> data stays on-device. No bank connectivity, no third-party aggregation.
+                This screen explains the “why” to evaluators.
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="height:12px;"></div>
+        <div class="note">
+          <b>Storyboard mode:</b> Use the left navigation to move between screens.
+          Buttons trigger modals and transitions to demonstrate user flows (CSV import, budgets, AI insights, receipt scan, anomalies).
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="app" id="appRoot" aria-hidden="true">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo" aria-hidden="true"></div>
+        <div>
+          <h1>FinSight <span class="sub">Interactive Storyboard</span></h1>
+        </div>
+      </div>
+
+      <div class="nav" id="nav">
+        <button data-screen="dashboard" class="active">
+          <span>Dashboard</span><span class="pill good" id="pillStatus">Unlocked</span>
+        </button>
+        <button data-screen="import">
+          <span>Import CSV</span><span class="pill">Wizard</span>
+        </button>
+        <button data-screen="transactions">
+          <span>Transactions</span><span class="pill" id="pillTx">—</span>
+        </button>
+        <button data-screen="budgets">
+          <span>Budgets</span><span class="pill warn" id="pillBud">2</span>
+        </button>
+        <button data-screen="ai">
+          <span>AI Insights</span><span class="pill" id="pillAi">Tips</span>
+        </button>
+        <button data-screen="receipt">
+          <span>Scan Receipt</span><span class="pill">OCR</span>
+        </button>
+        <button data-screen="anomalies">
+          <span>Anomaly Alerts</span><span class="pill bad" id="pillAnom">1</span>
+        </button>
+        <button data-screen="settings">
+          <span>Settings</span><span class="pill">Privacy</span>
+        </button>
+      </div>
+
+      <div class="sideFooter">
+        <div class="miniCard">
+          <div class="miniTitle">Day in the life</div>
+          <div class="miniValue">
+            <span class="dot" aria-hidden="true"></span>
+            <span id="scenarioLine">Morning: import statements to see trends.</span>
+          </div>
+          <div style="height:10px;"></div>
+          <button class="btn ghost" id="btnScenario">Open scenario panel</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+      <div class="topbar">
+        <div class="crumb">
+          <div>
+            <div class="title" id="pageTitle">Dashboard</div>
+            <div class="desc" id="pageDesc">A quick snapshot of your spending, budgets, and AI suggestions.</div>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn" id="btnReset"><span>Reset Demo</span><span class="kbd">R</span></button>
+          <button class="btn primary" id="btnQuickImport">Quick Import</button>
+          <button class="btn good" id="btnQuickReceipt">Scan Receipt</button>
+        </div>
+      </div>
+
+      <!-- Screens -->
+
+      <!-- Dashboard -->
+      <section class="screen active" id="screen-dashboard">
+        <div class="grid">
+          <div class="card">
+            <div class="cardHeader">
+              <div>
+                <h3>This Month Overview</h3>
+                <p>High-level snapshot from imported CSV + added receipts (fake data in this prototype).</p>
+              </div>
+              <button class="btn" id="btnViewTx">View transactions</button>
+            </div>
+            <div class="cardBody">
+              <div class="grid3">
+                <div class="stat">
+                  <div class="k">Total spent</div>
+                  <div class="v" id="statSpent">$0</div>
+                  <div class="hint" id="statSpentHint">Import CSV or add receipts to populate.</div>
+                </div>
+                <div class="stat">
+                  <div class="k">Top category</div>
+                  <div class="v" id="statTopCat">—</div>
+                  <div class="hint" id="statTopCatHint">Based on current month.</div>
+                </div>
+                <div class="stat">
+                  <div class="k">Budget status</div>
+                  <div class="v" id="statBudget">—</div>
+                  <div class="hint">Alerts when you’re trending over.</div>
+                </div>
+              </div>
+
+              <div style="height:14px;"></div>
+              <div class="bars" id="barsMonth" aria-label="Spending bars chart">
+                <!-- bars injected -->
+              </div>
+              <p class="help" style="margin-top:12px;">
+                Click <b>Quick Import</b> to simulate a CSV upload, or <b>Scan Receipt</b> to add a transaction with OCR + confirmation.
+              </p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="cardHeader">
+              <div>
+                <h3>AI Assistant — Next Best Actions</h3>
+                <p>Predicts trends and suggests adjustments (simulated, on-device mindset).</p>
+              </div>
+              <button class="btn primary" id="btnOpenAi">Open AI insights</button>
+            </div>
+            <div class="cardBody" id="aiCards">
+              <!-- injected -->
+            </div>
+          </div>
+        </div>
+
+        <div style="height:14px;"></div>
+        <div class="grid">
+          <div class="card">
+            <div class="cardHeader">
+              <div>
+                <h3>Budgets at a Glance</h3>
+                <p>Set category budgets and track progress.</p>
+              </div>
+              <button class="btn" id="btnGoBudgets">Manage budgets</button>
+            </div>
+            <div class="cardBody">
+              <div id="budgetGlance"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="cardHeader">
+              <div>
+                <h3>Alerts</h3>
+                <p>Anomalies and important reminders.</p>
+              </div>
+              <button class="btn bad" id="btnGoAnom">Review alerts</button>
+            </div>
+            <div class="cardBody" id="alertsList"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Import CSV -->
+      <section class="screen" id="screen-import">
+        <div class="card">
+          <div class="cardHeader">
+            <div>
+              <h3>Import CSV Statements</h3>
+              <p>Wizard flow: upload → map columns → preview → import (all simulated).</p>
+            </div>
+            <span class="pill">No bank APIs</span>
+          </div>
+          <div class="cardBody">
+            <div class="note" style="margin-bottom:12px;">
+              <b>Storyboard intent:</b> Demonstrates “CSV-only import” and “local-first” workflow without any external account linking.
+            </div>
+
+            <div class="grid">
+              <div class="card" style="box-shadow:none; background: rgba(255,255,255,.02);">
+                <div class="cardHeader">
+                  <div>
+                    <h3>Step 1 — Upload</h3>
+                    <p>Select a CSV file (mocked). We’ll generate preview rows.</p>
+                  </div>
+                  <span class="pill">1/3</span>
+                </div>
+                <div class="cardBody">
+                  <div class="row">
+                    <div class="field">
+                      <label>Choose CSV</label>
+                      <input id="csvFile" type="file" accept=".csv" />
+                    </div>
+                  </div>
+                  <div style="height:10px;"></div>
+                  <button class="btn primary" id="btnCsvNext">Generate preview</button>
+                  <p class="help" style="margin-top:10px;">
+                    Tip: In storyboard mode, file contents aren’t read; clicking “Generate preview” creates sample rows.
+                  </p>
+                </div>
+              </div>
+
+              <div class="card" style="box-shadow:none; background: rgba(255,255,255,.02);">
+                <div class="cardHeader">
+                  <div>
+                    <h3>Step 2 — Map Columns</h3>
+                    <p>Map bank CSV fields to FinSight transaction schema.</p>
+                  </div>
+                  <span class="pill">2/3</span>
+                </div>
+                <div class="cardBody">
+                  <div class="row">
+                    <div class="field">
+                      <label>Date column</label>
+                      <select id="mapDate">
+                        <option value="Date">Date</option>
+                        <option value="Posting Date">Posting Date</option>
+                        <option value="Transaction Date">Transaction Date</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label>Description column</label>
+                      <select id="mapDesc">
+                        <option value="Description">Description</option>
+                        <option value="Merchant">Merchant</option>
+                        <option value="Name">Name</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label>Amount column</label>
+                      <select id="mapAmt">
+                        <option value="Amount">Amount</option>
+                        <option value="Debit/Credit">Debit/Credit</option>
+                        <option value="Value">Value</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div style="height:10px;"></div>
+                  <button class="btn" id="btnCsvMap">Save mapping</button>
+                  <span class="help" id="mapSaved" style="display:none;">Mapping saved ✓</span>
+                </div>
+              </div>
+            </div>
+
+            <div style="height:14px;"></div>
+
+            <div class="card" style="box-shadow:none; background: rgba(255,255,255,.02);">
+              <div class="cardHeader">
+                <div>
+                  <h3>Step 3 — Preview & Import</h3>
+                  <p>Review duplicate detection + category guesses (simulated), then import.</p>
+                </div>
+                <span class="pill">3/3</span>
+              </div>
+              <div class="cardBody">
+                <div class="row">
+                  <div class="stat" style="flex:1;">
+                    <div class="k">Preview rows</div>
+                    <div class="v" id="prevRows">0</div>
+                    <div class="hint">Generated sample preview.</div>
+                  </div>
+                  <div class="stat" style="flex:1;">
+                    <div class="k">Duplicates detected</div>
+                    <div class="v" id="prevDup">0</div>
+                    <div class="hint">Will not double-count.</div>
+                  </div>
+                  <div class="stat" style="flex:1;">
+                    <div class="k">New transactions</div>
+                    <div class="v" id="prevNew">0</div>
+                    <div class="hint">Added to local vault (simulated).</div>
+                  </div>
+                </div>
+
+                <div style="height:12px;"></div>
+                <div class="card" style="box-shadow:none; background: rgba(17,26,46,.20); border-color: rgba(255,255,255,.08);">
+                  <div class="cardBody" style="padding:0;">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Date</th><th>Description</th><th>Amount</th><th>Category</th><th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody id="csvPreviewBody"></tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div style="height:12px;"></div>
+                <div class="row" style="justify-content:flex-end;">
+                  <button class="btn" id="btnCsvBack">Back</button>
+                  <button class="btn good" id="btnCsvImport" disabled>Import into local vault</button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      <!-- Transactions -->
+      <section class="screen" id="screen-transactions">
+        <div class="card">
+          <div class="cardHeader">
+            <div>
+              <h3>Transactions</h3>
+              <p>Browse imported transactions and manually corrected categories (simulated).</p>
+            </div>
+            <div class="row">
+              <button class="btn" id="btnAddManual">Add manual entry</button>
+              <button class="btn good" id="btnAddReceiptFromTx">Add via receipt scan</button>
+            </div>
+          </div>
+          <div class="cardBody">
+            <div class="row">
+              <div class="field">
+                <label>Search</label>
+                <input id="txSearch" placeholder="coffee, rent, grocery..." />
+              </div>
+              <div class="field">
+                <label>Category</label>
+                <select id="txFilterCat">
+                  <option value="all">All</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Month</label>
+                <select id="txFilterMonth">
+                  <option value="all">All</option>
+                  <option value="this">This month</option>
+                </select>
+              </div>
+            </div>
+            <div style="height:12px;"></div>
+
+            <div class="card" style="box-shadow:none; background: rgba(17,26,46,.20); border-color: rgba(255,255,255,.08);">
+              <div class="cardBody" style="padding:0;">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Date</th><th>Description</th><th>Category</th><th>Amount</th><th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="txBody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <p class="help" style="margin-top:12px;">
+              Click a category “Edit” to simulate user override (improves future categorization in real implementation).
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Budgets -->
+      <section class="screen" id="screen-budgets">
+        <div class="card">
+          <div class="cardHeader">
+            <div>
+              <h3>Budgets</h3>
+              <p>Create category budgets, track progress, and see AI-recommended adjustments.</p>
+            </div>
+            <button class="btn primary" id="btnNewBudget">New budget</button>
+          </div>
+          <div class="cardBody">
+            <div id="budgetList"></div>
+            <div style="height:12px;"></div>
+            <div class="note">
+              <b>Use case:</b> user defines budgets; app tracks spending and warns when trends suggest overages.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- AI Insights -->
+      <section class="screen" id="screen-ai">
+        <div class="grid">
+          <div class="card">
+            <div class="cardHeader">
+              <div>
+                <h3>Spending Prediction</h3>
+                <p>Forecast next month’s category totals (simulated). Adjust budgets proactively.</p>
+              </div>
+              <button class="btn" id="btnRefreshAi">Refresh</button>
+            </div>
+            <div class="cardBody" id="aiForecast"></div>
+          </div>
+          <div class="card">
+            <div class="cardHeader">
+              <div>
+                <h3>Recommendations</h3>
+                <p>Agentic assistant proposes “next best actions” with explainability.</p>
+              </div>
+              <span class="pill">Local-first</span>
+            </div>
+            <div class="cardBody" id="aiRecs"></div>
+          </div>
+        </div>
+
+        <div style="height:14px;"></div>
+        <div class="card">
+          <div class="cardHeader">
+            <div>
+              <h3>Try a What-If</h3>
+              <p>See how changing a budget might affect next month’s forecast.</p>
+            </div>
+            <button class="btn primary" id="btnWhatIf">Run what-if</button>
+          </div>
+          <div class="cardBody" id="aiWhatIf">
+            <div class="row">
+              <div class="field">
+                <label>Category</label>
+                <select id="whatIfCat"></select>
+              </div>
+              <div class="field">
+                <label>New monthly budget ($)</label>
+                <input id="whatIfBudget" type="number" placeholder="e.g., 250" />
+              </div>
+            </div>
+            <div style="height:10px;"></div>
+            <div class="note" id="whatIfResult">
+              Set a category + budget and click “Run what-if”.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Receipt scan -->
+      <section class="screen" id="screen-receipt">
+        <div class="card">
+          <div class="cardHeader">
+            <div>
+              <h3>Scan Receipt → Auto-Populate → Confirm</h3>
+              <p>Click-through demo: OCR extracts fields, AI suggests category, user confirms, then entry is added.</p>
+            </div>
+            <span class="pill">Camera/OCR mock</span>
+          </div>
+          <div class="cardBody">
+            <div class="grid">
+              <div class="card" style="box-shadow:none; background: rgba(255,255,255,.02);">
+                <div class="cardHeader">
+                  <div>
+                    <h3>Step 1 — Capture</h3>
+                    <p>Upload any image file (not processed in prototype). We simulate OCR output.</p>
+                  </div>
+                  <span class="pill">1/2</span>
+                </div>
+                <div class="cardBody">
+                  <div class="field">
+                    <label>Receipt image</label>
+                    <input id="receiptFile" type="file" accept="image/*" />
+                  </div>
+                  <div style="height:10px;"></div>
+                  <button class="btn good" id="btnRunOcr">Run OCR (simulate)</button>
+                  <p class="help" style="margin-top:10px;">
+                    The confirmation screen appears next (user can edit extracted fields).
+                  </p>
+                </div>
+              </div>
+
+              <div class="card" style="box-shadow:none; background: rgba(255,255,255,.02);">
+                <div class="cardHeader">
+                  <div>
+                    <h3>Step 2 — Confirm</h3>
+                    <p>Verify extracted data before submitting to the local vault.</p>
+                  </div>
+                  <span class="pill">2/2</span>
+                </div>
+                <div class="cardBody">
+                  <div class="row">
+                    <div class="field">
+                      <label>Merchant</label>
+                      <input id="rcMerchant" placeholder="(populate via OCR)" />
+                    </div>
+                    <div class="field">
+                      <label>Date</label>
+                      <input id="rcDate" type="date" />
+                    </div>
+                  </div>
+                  <div style="height:10px;"></div>
+                  <div class="row">
+                    <div class="field">
+                      <label>Total amount</label>
+                      <input id="rcAmount" type="number" step="0.01" placeholder="0.00" />
+                    </div>
+                    <div class="field">
+                      <label>Category (AI suggestion)</label>
+                      <select id="rcCategory"></select>
+                    </div>
+                  </div>
+                  <div style="height:10px;"></div>
+                  <div class="field">
+                    <label>Notes (optional)</label>
+                    <textarea id="rcNotes" placeholder="e.g., team lunch, groceries for weekend..." ></textarea>
+                  </div>
+                  <div style="height:12px;"></div>
+                  <div class="row" style="justify-content:flex-end;">
+                    <button class="btn" id="btnClearRc">Clear</button>
+                    <button class="btn primary" id="btnConfirmRc" disabled>Confirm & Add Entry</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style="height:12px;"></div>
+            <div class="note">
+              <b>Use case:</b> user doesn’t have a CSV yet (or wants immediate capture). Receipt scan accelerates entry while preserving manual confirmation.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Anomalies -->
+      <section class="screen" id="screen-anomalies">
+        <div class="card">
+          <div class="cardHeader">
+            <div>
+              <h3>Anomaly Alerts</h3>
+              <p>Flags unusual transactions (new merchant / spike / unusual frequency). User reviews and confirms.</p>
+            </div>
+            <button class="btn" id="btnGenerateAnom">Generate sample alert</button>
+          </div>
+          <div class="cardBody">
+            <div id="anomList"></div>
+            <div style="height:12px;"></div>
+            <div class="note">
+              <b>Use case:</b> helps users catch unexpected charges and refine what “unusual” means via feedback.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Settings -->
+      <section class="screen" id="screen-settings">
+        <div class="grid">
+          <div class="card">
+            <div class="cardHeader">
+              <div>
+                <h3>Privacy & Local Storage</h3>
+                <p>Communicate constraints clearly: CSV imports only, no bank login, encrypted local vault.</p>
+              </div>
+              <span class="pill">Explainable</span>
+            </div>
+            <div class="cardBody">
+              <div class="note">
+                <b>What this app does:</b>
+                <ul style="margin:8px 0 0 18px; color: var(--muted);">
+                  <li>Imports transactions via <b>CSV</b> exports from banks/credit cards.</li>
+                  <li>Stores data <b>locally</b> and <b>encrypted at rest</b> (simulated in prototype).</li>
+                  <li>Uses AI to predict spending and suggest actions (simulated).</li>
+                  <li>Adds transactions via receipt scan → OCR → confirmation (simulated).</li>
+                </ul>
+              </div>
+              <div style="height:12px;"></div>
+              <div class="note">
+                <b>What this app does NOT do:</b>
+                <ul style="margin:8px 0 0 18px; color: var(--muted);">
+                  <li>No bank APIs / no account aggregation</li>
+                  <li>No external bank login</li>
+                  <li>No cloud storage of financial data</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="cardHeader">
+              <div>
+                <h3>Session Controls</h3>
+                <p>Storyboard toggles for demo/presentation.</p>
+              </div>
+              <button class="btn bad" id="btnLock">Lock app</button>
+            </div>
+            <div class="cardBody">
+              <div class="row">
+                <button class="btn" id="btnSeed">Seed fake data</button>
+                <button class="btn warn" id="btnClearAll">Clear local demo data</button>
+              </div>
+              <div style="height:12px;"></div>
+              <div class="note">
+                <b>Evaluator tip:</b> Locking shows the “decrypt gate” again. Seeding makes the dashboard richer for screenshots.
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Scenario panel modal -->
+  <div class="overlay" id="scenarioOverlay" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal">
+      <div class="modalHead">
+        <div>
+          <h3>A Day in the Life — Why These Screens Exist</h3>
+          <p>Use this narrative in your presentation while clicking through screens.</p>
+        </div>
+        <button class="btn" id="btnCloseScenario">Close</button>
+      </div>
+      <div class="modalBody">
+        <div class="grid">
+          <div class="card" style="box-shadow:none; background: rgba(255,255,255,.02);">
+            <div class="cardHeader"><div><h3>Morning (Import)</h3><p>Get your latest statement in.</p></div><span class="pill">CSV</span></div>
+            <div class="cardBody">
+              <p class="help">
+                Alex downloads a bank statement CSV and imports it into FinSight.
+                The mapping step helps handle different bank formats.
+              </p>
+              <button class="btn primary" data-jump="import">Jump to Import CSV</button>
+            </div>
+          </div>
+          <div class="card" style="box-shadow:none; background: rgba(255,255,255,.02);">
+            <div class="cardHeader"><div><h3>Lunch (Receipt)</h3><p>Capture spending immediately.</p></div><span class="pill">OCR</span></div>
+            <div class="cardBody">
+              <p class="help">
+                Alex buys lunch and scans the receipt. OCR auto-fills merchant/date/amount,
+                then Alex confirms before it’s added to the encrypted vault.
+              </p>
+              <button class="btn good" data-jump="receipt">Jump to Receipt Scan</button>
+            </div>
+          </div>
+        </div>
+
+        <div style="height:12px;"></div>
+
+        <div class="grid">
+          <div class="card" style="box-shadow:none; background: rgba(255,255,255,.02);">
+            <div class="cardHeader"><div><h3>Afternoon (Budgets)</h3><p>Stay on track.</p></div><span class="pill warn">Budgets</span></div>
+            <div class="cardBody">
+              <p class="help">
+                FinSight shows budget progress and warns if trends suggest overspending.
+                Alex adjusts budgets based on upcoming plans.
+              </p>
+              <button class="btn" data-jump="budgets">Jump to Budgets</button>
+            </div>
+          </div>
+
+          <div class="card" style="box-shadow:none; background: rgba(255,255,255,.02);">
+            <div class="cardHeader"><div><h3>Evening (AI Insights)</h3><p>Plan ahead.</p></div><span class="pill">AI</span></div>
+            <div class="cardBody">
+              <p class="help">
+                The assistant predicts next month’s spending and suggests actions
+                (e.g., reduce Dining Out budget by 10%).
+              </p>
+              <button class="btn primary" data-jump="ai">Jump to AI Insights</button>
+            </div>
+          </div>
+        </div>
+
+        <div style="height:12px;"></div>
+
+        <div class="card" style="box-shadow:none; background: rgba(255,255,255,.02);">
+          <div class="cardHeader"><div><h3>Anytime (Anomalies)</h3><p>Catch unusual charges.</p></div><span class="pill bad">Alerts</span></div>
+          <div class="cardBody">
+            <p class="help">
+              If a new merchant charge appears or spending spikes unexpectedly,
+              Alex reviews anomaly alerts and marks them as “expected” or “suspicious”.
+            </p>
+            <button class="btn bad" data-jump="anomalies">Jump to Anomaly Alerts</button>
+          </div>
+        </div>
+      </div>
+      <div class="modalFoot">
+        <button class="btn" id="btnScenarioSeed">Seed demo data</button>
+        <button class="btn primary" id="btnScenarioStart">Start click-through on Dashboard</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Generic modal overlay -->
+  <div class="overlay" id="modalOverlay" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal" id="modalBox">
+      <div class="modalHead">
+        <div>
+          <h3 id="modalTitle">Modal</h3>
+          <p id="modalDesc">Description</p>
+        </div>
+        <button class="btn" id="modalClose">Close</button>
+      </div>
+      <div class="modalBody" id="modalBody"></div>
+      <div class="modalFoot" id="modalFoot"></div>
+    </div>
+  </div>
+
+  <script>
+    /***********************
+     * Storyboard Data (fake)
+     ***********************/
+    const CATEGORIES = ["Groceries", "Dining Out", "Rent", "Transport", "Entertainment", "Utilities", "Shopping", "Health", "Other"];
+
+    const demoState = {
+      unlocked: false,
+      mappingSaved: false,
+      csvPreview: [],
+      transactions: [],
+      budgets: [
+        { id: "b1", category: "Dining Out", limit: 250 },
+        { id: "b2", category: "Groceries", limit: 350 },
+      ],
+      anomalies: [
+        { id: "a1", date: isoToday(-2), merchant: "NEW MERCHANT: ZedPay", amount: 89.42, reason: "New merchant + higher than usual", status: "needs_review" }
+      ]
+    };
+
+    function isoToday(deltaDays=0){
+      const d = new Date();
+      d.setDate(d.getDate()+deltaDays);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth()+1).padStart(2,"0");
+      const dd = String(d.getDate()).padStart(2,"0");
+      return `${yyyy}-${mm}-${dd}`;
+    }
+
+    function money(n){
+      const sign = n < 0 ? "-" : "";
+      const abs = Math.abs(n);
+      return sign + "$" + abs.toFixed(2);
+    }
+
+    function load(){
+      const saved = localStorage.getItem("finsight_storyboard_v1");
+      if(saved){
+        try{
+          const parsed = JSON.parse(saved);
+          Object.assign(demoState, parsed);
+        }catch(e){}
+      }
+    }
+    function save(){
+      localStorage.setItem("finsight_storyboard_v1", JSON.stringify(demoState));
+    }
+
+    /***********************
+     * Navigation
+     ***********************/
+    const screenMeta = {
+      dashboard: { title:"Dashboard", desc:"A quick snapshot of your spending, budgets, and AI suggestions." },
+      import: { title:"Import CSV", desc:"CSV-only statement import wizard (simulated)." },
+      transactions: { title:"Transactions", desc:"Browse, search, and re-categorize your transactions." },
+      budgets: { title:"Budgets", desc:"Create budgets and track progress against spending." },
+      ai: { title:"AI Insights", desc:"Predictions + recommendations (simulated, local-first mindset)." },
+      receipt: { title:"Scan Receipt", desc:"Receipt OCR → auto-populate → confirmation → add entry (simulated)." },
+      anomalies: { title:"Anomaly Alerts", desc:"Review unusual transactions and give feedback." },
+      settings: { title:"Settings", desc:"Privacy-first explanations + storyboard controls." }
+    };
+
+    function setScreen(key){
+      document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+      document.getElementById("screen-"+key).classList.add("active");
+
+      document.querySelectorAll("#nav button").forEach(b => b.classList.toggle("active", b.dataset.screen === key));
+
+      document.getElementById("pageTitle").textContent = screenMeta[key].title;
+      document.getElementById("pageDesc").textContent = screenMeta[key].desc;
+
+      // scenario hint line
+      const scenarioLine = document.getElementById("scenarioLine");
+      const map = {
+        dashboard: "Overview: see budgets, alerts, and next best actions.",
+        import: "Morning: import CSV statements (no bank linking).",
+        transactions: "Review: search and correct categories quickly.",
+        budgets: "Plan: set budgets and track progress.",
+        ai: "Predict: get spending forecasts and recommendations.",
+        receipt: "Capture: scan a receipt and confirm entry.",
+        anomalies: "Protect: review unusual charges.",
+        settings: "Explain: show privacy model to evaluators."
+      };
+      scenarioLine.textContent = map[key] || "Click through screens.";
+      renderAll();
+    }
+
+    /***********************
+     * Modal helpers
+     ***********************/
+    const modalOverlay = document.getElementById("modalOverlay");
+    const modalTitle = document.getElementById("modalTitle");
+    const modalDesc = document.getElementById("modalDesc");
+    const modalBody = document.getElementById("modalBody");
+    const modalFoot = document.getElementById("modalFoot");
+
+    function openModal({title, desc, bodyHTML, footHTML}){
+      modalTitle.textContent = title || "Modal";
+      modalDesc.textContent = desc || "";
+      modalBody.innerHTML = bodyHTML || "";
+      modalFoot.innerHTML = footHTML || "";
+      modalOverlay.classList.add("show");
+      modalOverlay.setAttribute("aria-hidden","false");
+    }
+    function closeModal(){
+      modalOverlay.classList.remove("show");
+      modalOverlay.setAttribute("aria-hidden","true");
+    }
+    document.getElementById("modalClose").addEventListener("click", closeModal);
+    modalOverlay.addEventListener("click", (e)=>{ if(e.target === modalOverlay) closeModal(); });
+
+    /***********************
+     * Scenario panel
+     ***********************/
+    const scenarioOverlay = document.getElementById("scenarioOverlay");
+    document.getElementById("btnScenario").addEventListener("click", ()=>{
+      scenarioOverlay.classList.add("show");
+      scenarioOverlay.setAttribute("aria-hidden","false");
+    });
+    document.getElementById("btnCloseScenario").addEventListener("click", closeScenario);
+    scenarioOverlay.addEventListener("click",(e)=>{ if(e.target===scenarioOverlay) closeScenario(); });
+
+    function closeScenario(){
+      scenarioOverlay.classList.remove("show");
+      scenarioOverlay.setAttribute("aria-hidden","true");
+    }
+    scenarioOverlay.querySelectorAll("[data-jump]").forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        setScreen(btn.dataset.jump);
+        closeScenario();
+      });
+    });
+    document.getElementById("btnScenarioSeed").addEventListener("click", ()=>{ seed(); renderAll(); save(); });
+    document.getElementById("btnScenarioStart").addEventListener("click", ()=>{ setScreen("dashboard"); closeScenario(); });
+
+    /***********************
+     * Lock/Unlock (mock)
+     ***********************/
+    const lockShell = document.getElementById("lockShell");
+    const appRoot = document.getElementById("appRoot");
+
+    function showLock(){
+      lockShell.classList.add("show");
+      lockShell.setAttribute("aria-hidden","false");
+      appRoot.setAttribute("aria-hidden","true");
+    }
+    function hideLock(){
+      lockShell.classList.remove("show");
+      lockShell.setAttribute("aria-hidden","true");
+      appRoot.setAttribute("aria-hidden","false");
+    }
+
+    document.getElementById("btnAuth").addEventListener("click", ()=>{
+      openModal({
+        title:"Authenticated ✓",
+        desc:"In a real app, this would use an authentication service. Here it’s just a UX step.",
+        bodyHTML:`<div class="note"><b>Next:</b> unlock the local encrypted vault using a passphrase.</div>`,
+        footHTML:`<button class="btn primary" onclick="closeModal()">Continue</button>`
+      });
+    });
+
+    document.getElementById("btnDecrypt").addEventListener("click", ()=>{
+      demoState.unlocked = true;
+      save();
+      hideLock();
+      setScreen("dashboard");
+      renderAll();
+    });
+
+    /***********************
+     * Seed / Reset
+     ***********************/
+    function seed(){
+      // Create some transactions (this month)
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = today.getMonth()+1;
+      const prefix = `${year}-${String(month).padStart(2,"0")}-`;
+
+      const sample = [
+        { date: prefix+"02", desc:"Rent Payment", category:"Rent", amount: 1200.00 },
+        { date: prefix+"03", desc:"Grocery Mart", category:"Groceries", amount: 84.19 },
+        { date: prefix+"05", desc:"City Transit", category:"Transport", amount: 22.50 },
+        { date: prefix+"07", desc:"StreamFlix Subscription", category:"Entertainment", amount: 15.99 },
+        { date: prefix+"10", desc:"Coffee Corner", category:"Dining Out", amount: 6.45 },
+        { date: prefix+"12", desc:"Grocery Mart", category:"Groceries", amount: 61.33 },
+        { date: prefix+"14", desc:"Pizza Place", category:"Dining Out", amount: 19.80 },
+        { date: prefix+"16", desc:"Pharmacy Plus", category:"Health", amount: 14.25 }
+      ];
+      demoState.transactions = sample.map((t,i)=>({
+        id: "t"+(Date.now()+i),
+        ...t
+      }));
+      // Keep budgets as-is
+      if(!demoState.anomalies?.length){
+        demoState.anomalies = [
+          { id:"a1", date: isoToday(-2), merchant:"NEW MERCHANT: ZedPay", amount: 89.42, reason:"New merchant + higher than usual", status:"needs_review" }
+        ];
+      }
+    }
+
+    function resetAll(){
+      localStorage.removeItem("finsight_storyboard_v1");
+      demoState.unlocked = false;
+      demoState.mappingSaved = false;
+      demoState.csvPreview = [];
+      demoState.transactions = [];
+      demoState.budgets = [
+        { id: "b1", category: "Dining Out", limit: 250 },
+        { id: "b2", category: "Groceries", limit: 350 },
+      ];
+      demoState.anomalies = [
+        { id: "a1", date: isoToday(-2), merchant: "NEW MERCHANT: ZedPay", amount: 89.42, reason: "New merchant + higher than usual", status: "needs_review" }
+      ];
+      save();
+      showLock();
+      renderAll();
+    }
+
+    /***********************
+     * Rendering helpers
+     ***********************/
+    function monthBars(){
+      // Simulated last 6 months totals based on current tx
+      const base = 450 + (demoState.transactions.length * 55);
+      const vals = [
+        Math.max(120, base-210),
+        Math.max(140, base-140),
+        Math.max(160, base-95),
+        Math.max(180, base-40),
+        Math.max(200, base+10),
+        Math.max(220, base+35),
+      ];
+      const labels = ["Aug","Sep","Oct","Nov","Dec","Jan"];
+      const maxV = Math.max(...vals);
+      const el = document.getElementById("barsMonth");
+      el.innerHTML = "";
+      vals.forEach((v,i)=>{
+        const h = Math.round((v/maxV)*100);
+        const bar = document.createElement("div");
+        bar.className = "bar";
+        bar.style.height = `${Math.max(14,h)}%`;
+        bar.title = `${labels[i]}: ${money(v)}`;
+        bar.innerHTML = `<span>${labels[i]}</span>`;
+        el.appendChild(bar);
+      });
+    }
+
+    function summarizeThisMonth(){
+      const now = new Date();
+      const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-`;
+      const tx = demoState.transactions.filter(t => t.date.startsWith(ym));
+      const spent = tx.reduce((s,t)=> s + Math.max(0, t.amount), 0);
+      const byCat = {};
+      tx.forEach(t => { byCat[t.category] = (byCat[t.category]||0) + t.amount; });
+      let topCat = "—", topVal = 0;
+      Object.entries(byCat).forEach(([k,v])=>{
+        if(v>topVal){ topVal=v; topCat=k; }
+      });
+
+      // Budget status
+      const budgetStatuses = demoState.budgets.map(b=>{
+        const catSpent = byCat[b.category] || 0;
+        const pct = b.limit ? (catSpent / b.limit) : 0;
+        return { ...b, spent: catSpent, pct };
+      });
+      const over = budgetStatuses.filter(b=> b.pct >= 1.0);
+      const near = budgetStatuses.filter(b=> b.pct >= 0.8 && b.pct < 1.0);
+
+      let budgetText = "No budgets set";
+      if(demoState.budgets.length){
+        if(over.length) budgetText = `${over.length} over budget`;
+        else if(near.length) budgetText = `${near.length} nearing limit`;
+        else budgetText = "On track";
+      }
+
+      return { spent, topCat, budgetText, byCat, budgetStatuses };
+    }
+
+    function aiSuggestions(summary){
+      // Create a few contextual “agentic” suggestions
+      const tips = [];
+      if(summary.spent === 0){
+        tips.push({ tone:"info", title:"Import data to personalize", text:"Add a CSV statement or scan a receipt to generate tailored predictions and suggestions." });
+        tips.push({ tone:"info", title:"Privacy-first reminder", text:"FinSight doesn’t connect to banks—your data stays local in the encrypted vault." });
+        return tips;
+      }
+
+      const dining = summary.byCat["Dining Out"] || 0;
+      const groceries = summary.byCat["Groceries"] || 0;
+
+      // Suggest based on budget thresholds
+      summary.budgetStatuses.forEach(b=>{
+        if(b.pct >= 1.0){
+          tips.push({ tone:"bad", title:`Over budget: ${b.category}`, text:`You’ve spent ${money(b.spent)} vs budget ${money(b.limit)}. Consider reducing discretionary spend or increasing budget if this is planned.` });
+        }else if(b.pct >= 0.8){
+          tips.push({ tone:"warn", title:`Trending high: ${b.category}`, text:`You’re at ${(b.pct*100).toFixed(0)}% of budget. Suggestion: set a weekly cap to stay on track.` });
+        }
+      });
+
+      // Forecast-based tip
+      if(dining > 0){
+        tips.push({ tone:"info", title:"Prediction: Dining Out may rise", text:"Based on recent pattern, next month’s Dining Out could increase ~8–12%. Try a small budget adjustment or meal-plan reminder." });
+      }
+      if(groceries > 0){
+        tips.push({ tone:"info", title:"Savings opportunity", text:"Grocery spending seems stable. Consider setting a goal: save $20/week by switching one brand or planning meals." });
+      }
+
+      // Safety: ensure at least 3
+      while(tips.length < 3){
+        tips.push({ tone:"info", title:"Auto-categorization hint", text:"If a merchant is miscategorized, edit it once—future suggestions improve." });
+      }
+      return tips.slice(0,4);
+    }
+
+    function renderAICards(){
+      const sum = summarizeThisMonth();
+      const tips = aiSuggestions(sum);
+      const host = document.getElementById("aiCards");
+      host.innerHTML = "";
+      tips.forEach(t=>{
+        const cls = t.tone === "bad" ? "tag bad" : t.tone === "warn" ? "tag warn" : "tag";
+        const icon = t.tone === "bad" ? "⚠️" : t.tone === "warn" ? "🟡" : "✨";
+        const div = document.createElement("div");
+        div.className = "card";
+        div.style.boxShadow = "none";
+        div.style.background = "rgba(17,26,46,.22)";
+        div.style.borderColor = "rgba(255,255,255,.08)";
+        div.style.marginBottom = "10px";
+        div.innerHTML = `
+          <div class="cardBody">
+            <div class="${cls}">${icon} ${t.title}</div>
+            <div style="height:8px;"></div>
+            <div class="help" style="color: var(--text); opacity:.92;">${t.text}</div>
+            <div style="height:10px;"></div>
+            <button class="btn" data-ai-action="${t.title}">Take action</button>
+          </div>
+        `;
+        host.appendChild(div);
+      });
+
+      host.querySelectorAll("[data-ai-action]").forEach(btn=>{
+        btn.addEventListener("click", ()=>{
+          openModal({
+            title:"Action Planner (Storyboard)",
+            desc:"In the real app, this is where the assistant would guide the user step-by-step.",
+            bodyHTML:`<div class="note"><b>Selected:</b> ${btn.dataset.aiAction}<br><br>
+            <b>Example next steps:</b>
+            <ul style="margin:8px 0 0 18px; color: var(--muted);">
+              <li>Adjust a budget</li>
+              <li>Create a reminder rule</li>
+              <li>Review recent transactions in the category</li>
+            </ul>
+            </div>`,
+            footHTML:`<button class="btn" onclick="closeModal()">Close</button><button class="btn primary" onclick="closeModal()">Looks good</button>`
+          });
+        });
+      });
+    }
+
+    function renderDashboard(){
+      const sum = summarizeThisMonth();
+      document.getElementById("statSpent").textContent = money(sum.spent);
+      document.getElementById("statTopCat").textContent = sum.topCat;
+      document.getElementById("statBudget").textContent = sum.budgetText;
+
+      document.getElementById("statSpentHint").textContent =
+        sum.spent ? "Includes CSV imports + receipts." : "Import CSV or add receipts to populate.";
+
+      document.getElementById("statTopCatHint").textContent =
+        sum.topCat === "—" ? "No transactions yet." : `Highest spend: ${money(sum.byCat[sum.topCat] || 0)}.`;
+
+      monthBars();
+      renderAICards();
+      renderBudgetGlance(sum);
+      renderAlerts();
+    }
+
+    function renderBudgetGlance(sum){
+      const host = document.getElementById("budgetGlance");
+      if(!demoState.budgets.length){
+        host.innerHTML = `<div class="note">No budgets yet. Create one to track spending.</div>`;
+        return;
+      }
+      const rows = demoState.budgets.map(b=>{
+        const spent = sum.byCat[b.category] || 0;
+        const pct = b.limit ? (spent / b.limit) : 0;
+        const pctText = Math.min(999, Math.round(pct*100)) + "%";
+        const tone = pct>=1 ? "bad" : pct>=0.8 ? "warn" : "good";
+        return `
+          <div class="card" style="box-shadow:none; background: rgba(17,26,46,.20); border-color: rgba(255,255,255,.08); margin-bottom:10px;">
+            <div class="cardBody" style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+              <div>
+                <div style="font-weight:650;">${b.category}</div>
+                <div class="help">${money(spent)} of ${money(b.limit)}</div>
+              </div>
+              <span class="tag ${tone}">${pctText}</span>
+            </div>
+          </div>
+        `;
+      }).join("");
+      host.innerHTML = rows;
+    }
+
+    function renderAlerts(){
+      const host = document.getElementById("alertsList");
+      const count = demoState.anomalies.filter(a=>a.status==="needs_review").length;
+      document.getElementById("pillAnom").textContent = String(count);
+
+      if(count === 0){
+        host.innerHTML = `<div class="note">No alerts right now. Nice.</div>`;
+        return;
+      }
+      host.innerHTML = demoState.anomalies
+        .filter(a=>a.status==="needs_review")
+        .slice(0,3)
+        .map(a=>`
+          <div class="card" style="box-shadow:none; background: rgba(17,26,46,.20); border-color: rgba(255,255,255,.08); margin-bottom:10px;">
+            <div class="cardBody">
+              <div class="tag bad">⚠️ ${a.reason}</div>
+              <div style="height:8px;"></div>
+              <div style="font-weight:650;">${a.merchant}</div>
+              <div class="help">${a.date} • ${money(a.amount)}</div>
+              <div style="height:10px;"></div>
+              <button class="btn bad" data-open-anom="${a.id}">Review</button>
+            </div>
+          </div>
+        `).join("");
+
+      host.querySelectorAll("[data-open-anom]").forEach(btn=>{
+        btn.addEventListener("click", ()=>{
+          setScreen("anomalies");
+          setTimeout(()=>openAnomaly(btn.dataset.openAnom), 60);
+        });
+      });
+    }
+
+    function renderImport(){
+      document.getElementById("mapSaved").style.display = demoState.mappingSaved ? "inline" : "none";
+      document.getElementById("prevRows").textContent = demoState.csvPreview.length;
+      const dup = demoState.csvPreview.filter(r=>r.status==="Duplicate").length;
+      const add = demoState.csvPreview.filter(r=>r.status==="New").length;
+      document.getElementById("prevDup").textContent = dup;
+      document.getElementById("prevNew").textContent = add;
+      document.getElementById("btnCsvImport").disabled = demoState.csvPreview.length === 0;
+
+      const body = document.getElementById("csvPreviewBody");
+      body.innerHTML = demoState.csvPreview.map(r=>{
+        const tagClass = r.status === "Duplicate" ? "tag warn" : "tag good";
+        return `
+          <tr>
+            <td>${r.date}</td>
+            <td>${r.desc}</td>
+            <td>${money(r.amount)}</td>
+            <td><span class="tag">${r.category}</span></td>
+            <td><span class="${tagClass}">${r.status}</span></td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    function renderTransactions(){
+      const txBody = document.getElementById("txBody");
+      const q = (document.getElementById("txSearch").value || "").toLowerCase().trim();
+      const cat = document.getElementById("txFilterCat").value;
+      const month = document.getElementById("txFilterMonth").value;
+
+      const now = new Date();
+      const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-`;
+
+      let list = [...demoState.transactions];
+      if(q){
+        list = list.filter(t => (t.desc||"").toLowerCase().includes(q));
+      }
+      if(cat !== "all"){
+        list = list.filter(t => t.category === cat);
+      }
+      if(month === "this"){
+        list = list.filter(t => t.date.startsWith(ym));
+      }
+
+      // build filter dropdown options
+      const catSel = document.getElementById("txFilterCat");
+      const existing = new Set(Array.from(catSel.options).map(o=>o.value));
+      CATEGORIES.forEach(c=>{
+        if(!existing.has(c)){
+          const opt = document.createElement("option");
+          opt.value = c; opt.textContent = c;
+          catSel.appendChild(opt);
+        }
+      });
+
+      txBody.innerHTML = list.length ? list.map(t=>`
+        <tr>
+          <td>${t.date}</td>
+          <td>${t.desc}</td>
+          <td><span class="tag">${t.category}</span></td>
+          <td>${money(t.amount)}</td>
+          <td>
+            <button class="btn" data-edit-cat="${t.id}">Edit category</button>
+          </td>
+        </tr>
+      `).join("") : `
+        <tr><td colspan="5" style="color: var(--muted); padding:14px;">No transactions yet. Try Import CSV or Scan Receipt.</td></tr>
+      `;
+
+      txBody.querySelectorAll("[data-edit-cat]").forEach(btn=>{
+        btn.addEventListener("click", ()=>{
+          const id = btn.dataset.editCat;
+          const tx = demoState.transactions.find(x=>x.id===id);
+          if(!tx) return;
+          openModal({
+            title:"Edit Category (Storyboard)",
+            desc:"Simulates user override of auto-categorization.",
+            bodyHTML: `
+              <div class="note"><b>${tx.desc}</b><br>${tx.date} • ${money(tx.amount)}</div>
+              <div style="height:12px;"></div>
+              <div class="field">
+                <label>Category</label>
+                <select id="editCatSel">
+                  ${CATEGORIES.map(c=>`<option ${c===tx.category?"selected":""} value="${c}">${c}</option>`).join("")}
+                </select>
+              </div>
+              <div style="height:10px;"></div>
+              <div class="help">In the real app, this choice would improve future category predictions.</div>
+            `,
+            footHTML: `
+              <button class="btn" onclick="closeModal()">Cancel</button>
+              <button class="btn primary" id="btnSaveCat">Save</button>
+            `
+          });
+          document.getElementById("btnSaveCat").addEventListener("click", ()=>{
+            const sel = document.getElementById("editCatSel").value;
+            tx.category = sel;
+            save();
+            closeModal();
+            renderAll();
+          });
+        });
+      });
+
+      document.getElementById("pillTx").textContent = String(demoState.transactions.length || "—");
+    }
+
+    function renderBudgets(){
+      const host = document.getElementById("budgetList");
+      const sum = summarizeThisMonth();
+      if(!demoState.budgets.length){
+        host.innerHTML = `<div class="note">No budgets yet. Click “New budget” to create one.</div>`;
+        return;
+      }
+      host.innerHTML = demoState.budgets.map(b=>{
+        const spent = sum.byCat[b.category] || 0;
+        const pct = b.limit ? (spent / b.limit) : 0;
+        const tone = pct>=1 ? "bad" : pct>=0.8 ? "warn" : "good";
+        return `
+          <div class="card" style="box-shadow:none; background: rgba(17,26,46,.20); border-color: rgba(255,255,255,.08); margin-bottom:10px;">
+            <div class="cardBody">
+              <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                <div>
+                  <div style="font-weight:700;">${b.category}</div>
+                  <div class="help">Spent ${money(spent)} of ${money(b.limit)} this month</div>
+                </div>
+                <span class="tag ${tone}">${Math.round(pct*100)}%</span>
+              </div>
+              <div style="height:10px;"></div>
+              <div class="row" style="justify-content:flex-end;">
+                <button class="btn" data-edit-budget="${b.id}">Edit</button>
+                <button class="btn bad" data-del-budget="${b.id}">Delete</button>
+                <button class="btn primary" data-ai-budget="${b.category}">Ask AI</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      host.querySelectorAll("[data-edit-budget]").forEach(btn=>{
+        btn.addEventListener("click", ()=> editBudget(btn.dataset.editBudget));
+      });
+      host.querySelectorAll("[data-del-budget]").forEach(btn=>{
+        btn.addEventListener("click", ()=> deleteBudget(btn.dataset.delBudget));
+      });
+      host.querySelectorAll("[data-ai-budget]").forEach(btn=>{
+        btn.addEventListener("click", ()=> {
+          setScreen("ai");
+          setTimeout(()=> {
+            openModal({
+              title:"AI Budget Tip (Storyboard)",
+              desc:"Simulated “agentic” recommendation.",
+              bodyHTML:`<div class="note"><b>Category:</b> ${btn.dataset.aiBudget}<br><br>
+              Suggestion: reduce by 10% for 2 weeks, then reassess. If spend stays high, increase budget to reflect reality and set a weekly cap.</div>`,
+              footHTML:`<button class="btn" onclick="closeModal()">Close</button><button class="btn primary" onclick="closeModal()">Apply idea</button>`
+            });
+          }, 80);
+        });
+      });
+
+      document.getElementById("pillBud").textContent = String(demoState.budgets.length);
+    }
+
+    function renderAI(){
+      const sum = summarizeThisMonth();
+
+      // Forecast
+      const forecastHost = document.getElementById("aiForecast");
+      const base = sum.spent || 0;
+      const forecast = [
+        { c:"Dining Out", n: (sum.byCat["Dining Out"]||0) * (1.10) + 12 },
+        { c:"Groceries", n: (sum.byCat["Groceries"]||0) * (1.03) + 8 },
+        { c:"Transport", n: (sum.byCat["Transport"]||0) * (1.02) + 4 },
+        { c:"Entertainment", n: (sum.byCat["Entertainment"]||0) * (1.06) + 6 }
+      ].map(x => ({...x, n: Math.max(0, x.n)}));
+
+      if(base === 0){
+        forecastHost.innerHTML = `<div class="note">No transaction history yet. Import CSV or scan a receipt to enable predictions.</div>`;
+      }else{
+        forecastHost.innerHTML = forecast.map(f=>{
+          const bud = demoState.budgets.find(b=>b.category===f.c);
+          let badge = `<span class="tag">Forecast ${money(f.n)}</span>`;
+          if(bud){
+            const tone = f.n > bud.limit ? "bad" : (f.n > bud.limit*0.85 ? "warn" : "good");
+            badge = `<span class="tag ${tone}">Forecast ${money(f.n)} vs budget ${money(bud.limit)}</span>`;
+          }
+          return `
+            <div class="card" style="box-shadow:none; background: rgba(17,26,46,.20); border-color: rgba(255,255,255,.08); margin-bottom:10px;">
+              <div class="cardBody" style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                <div>
+                  <div style="font-weight:700;">${f.c}</div>
+                  <div class="help">Predicted next month based on recent pattern (simulated).</div>
+                </div>
+                ${badge}
+              </div>
+            </div>
+          `;
+        }).join("");
+      }
+
+      // Recs
+      const recHost = document.getElementById("aiRecs");
+      const tips = aiSuggestions(sum);
+      recHost.innerHTML = tips.map(t=>{
+        const tone = t.tone === "bad" ? "bad" : t.tone === "warn" ? "warn" : "";
+        return `
+          <div class="card" style="box-shadow:none; background: rgba(17,26,46,.20); border-color: rgba(255,255,255,.08); margin-bottom:10px;">
+            <div class="cardBody">
+              <div class="tag ${tone}">✨ ${t.title}</div>
+              <div style="height:8px;"></div>
+              <div class="help" style="color: var(--text); opacity:.92;">${t.text}</div>
+              <div style="height:10px;"></div>
+              <button class="btn" data-ai-why="${t.title}">Why?</button>
+              <button class="btn primary" data-ai-do="${t.title}">Do it</button>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      recHost.querySelectorAll("[data-ai-why]").forEach(btn=>{
+        btn.addEventListener("click", ()=>{
+          openModal({
+            title:"Explainability (Storyboard)",
+            desc:"A real local model would show the reasoning or supporting transactions.",
+            bodyHTML:`<div class="note"><b>${btn.dataset.aiWhy}</b><br><br>
+            Explanation: based on frequency + amounts in recent transactions, plus your current budget thresholds. (Simulated)</div>`,
+            footHTML:`<button class="btn" onclick="closeModal()">Close</button>`
+          });
+        });
+      });
+      recHost.querySelectorAll("[data-ai-do]").forEach(btn=>{
+        btn.addEventListener("click", ()=>{
+          openModal({
+            title:"Assistant Action (Storyboard)",
+            desc:"Proposed steps, user stays in control.",
+            bodyHTML:`<div class="note"><b>${btn.dataset.aiDo}</b><br><br>
+            Suggested flow: open relevant category → adjust budget or set reminder → confirm change.</div>`,
+            footHTML:`<button class="btn" onclick="closeModal()">Cancel</button>
+                      <button class="btn primary" onclick="closeModal()">Proceed</button>`
+          });
+        });
+      });
+
+      // what-if categories
+      const sel = document.getElementById("whatIfCat");
+      sel.innerHTML = CATEGORIES.map(c=>`<option value="${c}">${c}</option>`).join("");
+    }
+
+    function renderReceipt(){
+      const catSel = document.getElementById("rcCategory");
+      catSel.innerHTML = CATEGORIES.map(c=>`<option value="${c}">${c}</option>`).join("");
+      validateReceiptConfirm();
+    }
+
+    function renderAnomalies(){
+      const host = document.getElementById("anomList");
+      const list = [...demoState.anomalies].sort((a,b)=> (a.date<b.date?1:-1));
+      const openCount = list.filter(a=>a.status==="needs_review").length;
+      document.getElementById("pillAnom").textContent = String(openCount);
+
+      if(!list.length){
+        host.innerHTML = `<div class="note">No alerts.</div>`;
+        return;
+      }
+      host.innerHTML = list.map(a=>{
+        const tone = a.status==="resolved" ? "good" : "bad";
+        const statusLabel = a.status==="resolved" ? "Resolved" : "Needs review";
+        return `
+          <div class="card" style="box-shadow:none; background: rgba(17,26,46,.20); border-color: rgba(255,255,255,.08); margin-bottom:10px;">
+            <div class="cardBody">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+                <div>
+                  <div class="tag ${tone}">⚠️ ${statusLabel}</div>
+                  <div style="height:8px;"></div>
+                  <div style="font-weight:750;">${a.merchant}</div>
+                  <div class="help">${a.date} • ${money(a.amount)} • ${a.reason}</div>
+                </div>
+                <button class="btn" data-open-anom="${a.id}">Open</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      host.querySelectorAll("[data-open-anom]").forEach(btn=>{
+        btn.addEventListener("click", ()=> openAnomaly(btn.dataset.openAnom));
+      });
+    }
+
+    function openAnomaly(id){
+      const a = demoState.anomalies.find(x=>x.id===id);
+      if(!a) return;
+      openModal({
+        title:"Review Anomaly",
+        desc:"User confirms whether it’s expected or suspicious (feedback refines detection).",
+        bodyHTML:`
+          <div class="note">
+            <b>${a.merchant}</b><br>
+            ${a.date} • ${money(a.amount)}<br><br>
+            <b>Reason:</b> ${a.reason}
+          </div>
+          <div style="height:12px;"></div>
+          <div class="help">What would you like to do?</div>
+        `,
+        footHTML:`
+          <button class="btn bad" id="btnMarkSusp">Mark suspicious</button>
+          <button class="btn" id="btnMarkExpected">Mark expected</button>
+          <button class="btn primary" id="btnResolve">Resolve</button>
+        `
+      });
+
+      document.getElementById("btnMarkSusp").addEventListener("click", ()=>{
+        openModal({
+          title:"Reported (Storyboard)",
+          desc:"In a real app, this might guide the user to dispute with the bank (without logging in).",
+          bodyHTML:`<div class="note">Next steps: freeze card, contact bank, review recent merchants. (No bank API calls here.)</div>`,
+          footHTML:`<button class="btn primary" onclick="closeModal()">OK</button>`
+        });
+      });
+
+      document.getElementById("btnMarkExpected").addEventListener("click", ()=>{
+        a.reason = "User marked as expected (training signal)";
+        save(); renderAll(); closeModal();
+      });
+
+      document.getElementById("btnResolve").addEventListener("click", ()=>{
+        a.status = "resolved";
+        save(); renderAll(); closeModal();
+      });
+    }
+
+    function renderSettings(){
+      // nothing special beyond buttons
+    }
+
+    function renderAll(){
+      document.getElementById("pillStatus").textContent = demoState.unlocked ? "Unlocked" : "Locked";
+      document.getElementById("pillStatus").className = "pill " + (demoState.unlocked ? "good" : "bad");
+      document.getElementById("pillTx").textContent = demoState.transactions.length ? String(demoState.transactions.length) : "—";
+      document.getElementById("pillBud").textContent = String(demoState.budgets.length);
+      // Screens
+      renderDashboard();
+      renderImport();
+      renderTransactions();
+      renderBudgets();
+      renderAI();
+      renderReceipt();
+      renderAnomalies();
+      renderSettings();
+    }
+
+    /***********************
+     * Interactions
+     ***********************/
+    // Nav
+    document.getElementById("nav").addEventListener("click", (e)=>{
+      const btn = e.target.closest("button[data-screen]");
+      if(!btn) return;
+      setScreen(btn.dataset.screen);
+    });
+
+    // Top bar quick actions
+    document.getElementById("btnQuickImport").addEventListener("click", ()=>{
+      setScreen("import");
+      setTimeout(()=> simulateCsvPreview(), 80);
+    });
+    document.getElementById("btnQuickReceipt").addEventListener("click", ()=>{
+      setScreen("receipt");
+      setTimeout(()=> simulateOcrPopulate(), 120);
+    });
+
+    document.getElementById("btnViewTx").addEventListener("click", ()=> setScreen("transactions"));
+    document.getElementById("btnGoBudgets").addEventListener("click", ()=> setScreen("budgets"));
+    document.getElementById("btnOpenAi").addEventListener("click", ()=> setScreen("ai"));
+    document.getElementById("btnGoAnom").addEventListener("click", ()=> setScreen("anomalies"));
+
+    // Reset demo
+    document.getElementById("btnReset").addEventListener("click", ()=>{
+      openModal({
+        title:"Reset storyboard demo?",
+        desc:"Clears local demo data and returns to the lock screen.",
+        bodyHTML:`<div class="note">This will remove seeded/imported transactions in this browser.</div>`,
+        footHTML:`<button class="btn" onclick="closeModal()">Cancel</button>
+                  <button class="btn bad" id="btnDoReset">Reset</button>`
+      });
+      document.getElementById("btnDoReset").addEventListener("click", ()=>{
+        closeModal();
+        resetAll();
+      });
+    });
+
+    // Keyboard shortcut
+    window.addEventListener("keydown", (e)=>{
+      if(e.key.toLowerCase() === "r" && !modalOverlay.classList.contains("show") && !scenarioOverlay.classList.contains("show")){
+        resetAll();
+      }
+      if(e.key === "Escape"){
+        closeModal();
+        closeScenario();
+      }
+    });
+
+    // Import wizard actions
+    document.getElementById("btnCsvNext").addEventListener("click", simulateCsvPreview);
+    document.getElementById("btnCsvMap").addEventListener("click", ()=>{
+      demoState.mappingSaved = true;
+      save();
+      renderAll();
+      document.getElementById("mapSaved").style.display = "inline";
+    });
+    document.getElementById("btnCsvBack").addEventListener("click", ()=>{
+      demoState.csvPreview = [];
+      save();
+      renderAll();
+    });
+    document.getElementById("btnCsvImport").addEventListener("click", ()=>{
+      // Add "New" rows to transactions
+      const toAdd = demoState.csvPreview.filter(r=>r.status==="New").map((r,i)=>({
+        id: "t"+(Date.now()+i),
+        date: r.date,
+        desc: r.desc,
+        category: r.category,
+        amount: r.amount
+      }));
+      demoState.transactions.unshift(...toAdd);
+      demoState.csvPreview = [];
+      save();
+      renderAll();
+      openModal({
+        title:"Imported ✓",
+        desc:"Transactions added to local vault (simulated).",
+        bodyHTML:`<div class="note">Added <b>${toAdd.length}</b> transactions. No duplicates were double-counted.</div>`,
+        footHTML:`<button class="btn" onclick="closeModal()">Close</button>
+                  <button class="btn primary" onclick="closeModal(); setScreen('transactions')">View transactions</button>`
+      });
+    });
+
+    function simulateCsvPreview(){
+      // generate sample preview rows
+      const now = new Date();
+      const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+      const rows = [
+        { date:`${ym}-18`, desc:"Coffee Corner", amount: 5.95, category:"Dining Out", status:"New" },
+        { date:`${ym}-18`, desc:"Grocery Mart", amount: 42.10, category:"Groceries", status:"New" },
+        { date:`${ym}-19`, desc:"City Transit", amount: 11.25, category:"Transport", status:"New" },
+        { date:`${ym}-19`, desc:"StreamFlix Subscription", amount: 15.99, category:"Entertainment", status:"Duplicate" },
+        { date:`${ym}-20`, desc:"Electric Utility", amount: 58.22, category:"Utilities", status:"New" },
+      ];
+
+      // mark duplicates if already in transactions
+      const existingKey = new Set(demoState.transactions.map(t=> `${t.date}|${t.desc}|${t.amount.toFixed(2)}`));
+      rows.forEach(r=>{
+        const key = `${r.date}|${r.desc}|${r.amount.toFixed(2)}`;
+        if(existingKey.has(key)) r.status = "Duplicate";
+      });
+
+      demoState.csvPreview = rows;
+      save();
+      renderAll();
+      document.getElementById("btnCsvImport").disabled = false;
+    }
+
+    // Transactions search filters
+    ["txSearch","txFilterCat","txFilterMonth"].forEach(id=>{
+      document.getElementById(id).addEventListener("input", renderTransactions);
+      document.getElementById(id).addEventListener("change", renderTransactions);
+    });
+
+    // Add manual entry
+    document.getElementById("btnAddManual").addEventListener("click", ()=>{
+      openModal({
+        title:"Add Manual Transaction",
+        desc:"Storyboard-only form (no backend).",
+        bodyHTML: `
+          <div class="row">
+            <div class="field">
+              <label>Date</label>
+              <input id="mDate" type="date" value="${isoToday(0)}" />
+            </div>
+            <div class="field">
+              <label>Description</label>
+              <input id="mDesc" placeholder="e.g., Coffee Corner" />
+            </div>
+          </div>
+          <div style="height:10px;"></div>
+          <div class="row">
+            <div class="field">
+              <label>Amount</label>
+              <input id="mAmt" type="number" step="0.01" placeholder="0.00" />
+            </div>
+            <div class="field">
+              <label>Category</label>
+              <select id="mCat">
+                ${CATEGORIES.map(c=>`<option value="${c}">${c}</option>`).join("")}
+              </select>
+            </div>
+          </div>
+          <div style="height:10px;"></div>
+          <div class="help">This demonstrates the UX for adding entries when no CSV/receipt is available.</div>
+        `,
+        footHTML: `
+          <button class="btn" onclick="closeModal()">Cancel</button>
+          <button class="btn primary" id="btnSaveManual">Add</button>
+        `
+      });
+      document.getElementById("btnSaveManual").addEventListener("click", ()=>{
+        const date = document.getElementById("mDate").value;
+        const desc = document.getElementById("mDesc").value.trim();
+        const amt = parseFloat(document.getElementById("mAmt").value);
+        const cat = document.getElementById("mCat").value;
+        if(!date || !desc || !isFinite(amt)){
+          openModal({
+            title:"Missing fields",
+            desc:"Please fill date, description, and amount.",
+            bodyHTML:`<div class="note">Try again.</div>`,
+            footHTML:`<button class="btn primary" onclick="closeModal()">OK</button>`
+          });
+          return;
+        }
+        demoState.transactions.unshift({ id:"t"+Date.now(), date, desc, category:cat, amount: Math.abs(amt) });
+        save(); closeModal(); renderAll();
+      });
+    });
+
+    document.getElementById("btnAddReceiptFromTx").addEventListener("click", ()=> setScreen("receipt"));
+
+    // Budgets: new/edit/delete
+    document.getElementById("btnNewBudget").addEventListener("click", ()=> newBudget());
+    function newBudget(){
+      openModal({
+        title:"New Budget",
+        desc:"Create a monthly category budget.",
+        bodyHTML: `
+          <div class="row">
+            <div class="field">
+              <label>Category</label>
+              <select id="bCat">
+                ${CATEGORIES.map(c=>`<option value="${c}">${c}</option>`).join("")}
+              </select>
+            </div>
+            <div class="field">
+              <label>Monthly limit ($)</label>
+              <input id="bLim" type="number" placeholder="e.g., 300" />
+            </div>
+          </div>
+          <div style="height:10px;"></div>
+          <div class="help">Budgets power alerts + AI suggestions.</div>
+        `,
+        footHTML: `
+          <button class="btn" onclick="closeModal()">Cancel</button>
+          <button class="btn primary" id="btnSaveBudget">Create</button>
+        `
+      });
+      document.getElementById("btnSaveBudget").addEventListener("click", ()=>{
+        const cat = document.getElementById("bCat").value;
+        const lim = parseFloat(document.getElementById("bLim").value);
+        if(!isFinite(lim) || lim<=0){
+          openModal({ title:"Invalid limit", desc:"Enter a positive number.", bodyHTML:`<div class="note">Try again.</div>`, footHTML:`<button class="btn primary" onclick="closeModal()">OK</button>`});
+          return;
+        }
+        // replace existing budget for category
+        demoState.budgets = demoState.budgets.filter(b=>b.category!==cat);
+        demoState.budgets.push({ id:"b"+Date.now(), category:cat, limit: lim });
+        save(); closeModal(); renderAll();
+      });
+    }
+
+    function editBudget(id){
+      const b = demoState.budgets.find(x=>x.id===id);
+      if(!b) return;
+      openModal({
+        title:"Edit Budget",
+        desc:"Adjust monthly budget limit.",
+        bodyHTML: `
+          <div class="row">
+            <div class="field">
+              <label>Category</label>
+              <input value="${b.category}" disabled />
+            </div>
+            <div class="field">
+              <label>Monthly limit ($)</label>
+              <input id="editLim" type="number" value="${b.limit}" />
+            </div>
+          </div>
+        `,
+        footHTML: `
+          <button class="btn" onclick="closeModal()">Cancel</button>
+          <button class="btn primary" id="btnSaveEditBudget">Save</button>
+        `
+      });
+      document.getElementById("btnSaveEditBudget").addEventListener("click", ()=>{
+        const lim = parseFloat(document.getElementById("editLim").value);
+        if(!isFinite(lim) || lim<=0) return;
+        b.limit = lim;
+        save(); closeModal(); renderAll();
+      });
+    }
+    function deleteBudget(id){
+      openModal({
+        title:"Delete budget?",
+        desc:"Storyboard confirmation",
+        bodyHTML:`<div class="note">This removes the budget from the list.</div>`,
+        footHTML:`<button class="btn" onclick="closeModal()">Cancel</button>
+                  <button class="btn bad" id="btnDelBudgetConfirm">Delete</button>`
+      });
+      document.getElementById("btnDelBudgetConfirm").addEventListener("click", ()=>{
+        demoState.budgets = demoState.budgets.filter(b=>b.id!==id);
+        save(); closeModal(); renderAll();
+      });
+    }
+
+    // AI buttons
+    document.getElementById("btnRefreshAi").addEventListener("click", ()=>{
+      openModal({
+        title:"AI Refreshed (Storyboard)",
+        desc:"In a real app, this would recompute predictions locally using the updated dataset.",
+        bodyHTML:`<div class="note">Predictions & recommendations updated.</div>`,
+        footHTML:`<button class="btn primary" onclick="closeModal()">OK</button>`
+      });
+      renderAll();
+    });
+
+    document.getElementById("btnWhatIf").addEventListener("click", ()=>{
+      const cat = document.getElementById("whatIfCat").value;
+      const newB = parseFloat(document.getElementById("whatIfBudget").value);
+      if(!isFinite(newB) || newB<=0){
+        document.getElementById("whatIfResult").innerHTML = `Enter a valid budget amount to run what-if.`;
+        return;
+      }
+      const sum = summarizeThisMonth();
+      const current = sum.byCat[cat] || 0;
+      const forecast = current * 1.08 + 10; // simple simulated
+      const tone = forecast > newB ? "bad" : (forecast > newB*0.85 ? "warn" : "good");
+      document.getElementById("whatIfResult").innerHTML = `
+        <b>Result:</b> forecast for <b>${cat}</b> is ~<b>${money(forecast)}</b>.
+        With a new budget of <b>${money(newB)}</b>, status would be
+        <span class="tag ${tone}" style="margin-left:6px;">${tone==="bad"?"Over":tone==="warn"?"Tight":"Comfortable"}</span>.
+      `;
+    });
+
+    // Receipt OCR simulation
+    document.getElementById("btnRunOcr").addEventListener("click", simulateOcrPopulate);
+
+    function simulateOcrPopulate(){
+      // Pick a plausible receipt
+      const samples = [
+        { merchant:"Coffee Corner", category:"Dining Out", amount: 7.85 },
+        { merchant:"Grocery Mart", category:"Groceries", amount: 54.21 },
+        { merchant:"City Transit", category:"Transport", amount: 12.00 },
+        { merchant:"Pharmacy Plus", category:"Health", amount: 18.34 },
+      ];
+      const s = samples[Math.floor(Math.random()*samples.length)];
+      document.getElementById("rcMerchant").value = s.merchant;
+      document.getElementById("rcDate").value = isoToday(0);
+      document.getElementById("rcAmount").value = s.amount.toFixed(2);
+      document.getElementById("rcCategory").value = s.category;
+      document.getElementById("rcNotes").value = "Auto-filled via OCR (simulated).";
+      validateReceiptConfirm();
+
+      openModal({
+        title:"OCR Complete ✓",
+        desc:"Fields were extracted and an AI category was suggested.",
+        bodyHTML:`<div class="note">Next: review & confirm the fields on the right.</div>`,
+        footHTML:`<button class="btn primary" onclick="closeModal()">Go to confirmation</button>`
+      });
+    }
+
+    function validateReceiptConfirm(){
+      const ok =
+        document.getElementById("rcMerchant").value.trim().length > 0 &&
+        document.getElementById("rcDate").value &&
+        isFinite(parseFloat(document.getElementById("rcAmount").value));
+      document.getElementById("btnConfirmRc").disabled = !ok;
+    }
+
+    ["rcMerchant","rcDate","rcAmount","rcCategory","rcNotes"].forEach(id=>{
+      document.getElementById(id).addEventListener("input", validateReceiptConfirm);
+      document.getElementById(id).addEventListener("change", validateReceiptConfirm);
+    });
+
+    document.getElementById("btnClearRc").addEventListener("click", ()=>{
+      document.getElementById("rcMerchant").value = "";
+      document.getElementById("rcDate").value = "";
+      document.getElementById("rcAmount").value = "";
+      document.getElementById("rcNotes").value = "";
+      validateReceiptConfirm();
+    });
+
+    document.getElementById("btnConfirmRc").addEventListener("click", ()=>{
+      const date = document.getElementById("rcDate").value;
+      const desc = document.getElementById("rcMerchant").value.trim();
+      const amount = parseFloat(document.getElementById("rcAmount").value);
+      const category = document.getElementById("rcCategory").value;
+      if(!date || !desc || !isFinite(amount)) return;
+
+      demoState.transactions.unshift({
+        id:"t"+Date.now(),
+        date,
+        desc,
+        category,
+        amount: Math.abs(amount)
+      });
+      save();
+      renderAll();
+
+      openModal({
+        title:"Receipt Added ✓",
+        desc:"Entry stored in local vault (simulated).",
+        bodyHTML:`<div class="note"><b>${desc}</b><br>${date} • ${money(amount)} • ${category}<br><br>
+        Next: view it in Transactions or return to Dashboard.</div>`,
+        footHTML:`<button class="btn" onclick="closeModal(); setScreen('dashboard')">Dashboard</button>
+                  <button class="btn primary" onclick="closeModal(); setScreen('transactions')">Transactions</button>`
+      });
+    });
+
+    // Anomaly generate
+    document.getElementById("btnGenerateAnom").addEventListener("click", ()=>{
+      const merchants = ["Unknown Charge: K-Store", "NEW MERCHANT: ZedPay", "Card Not Present: QuickShip", "Suspicious: CloudVPS"];
+      const m = merchants[Math.floor(Math.random()*merchants.length)];
+      const amt = +(Math.random()*120 + 25).toFixed(2);
+      demoState.anomalies.unshift({
+        id:"a"+Date.now(),
+        date: isoToday(0),
+        merchant: m,
+        amount: amt,
+        reason: "Unusual amount or merchant (simulated)",
+        status: "needs_review"
+      });
+      save(); renderAll();
+      openModal({
+        title:"Sample alert created",
+        desc:"Storyboard-only anomaly generation.",
+        bodyHTML:`<div class="note">Added: <b>${m}</b> • ${money(amt)}</div>`,
+        footHTML:`<button class="btn primary" onclick="closeModal()">OK</button>`
+      });
+    });
+
+    // Settings buttons
+    document.getElementById("btnLock").addEventListener("click", ()=>{
+      demoState.unlocked = false;
+      save();
+      showLock();
+    });
+    document.getElementById("btnSeed").addEventListener("click", ()=>{ seed(); save(); renderAll(); });
+    document.getElementById("btnClearAll").addEventListener("click", ()=>{
+      openModal({
+        title:"Clear local demo data?",
+        desc:"Removes transactions and previews in this browser.",
+        bodyHTML:`<div class="note">Budgets and anomalies will reset to defaults.</div>`,
+        footHTML:`<button class="btn" onclick="closeModal()">Cancel</button>
+                  <button class="btn bad" id="btnClearConfirm">Clear</button>`
+      });
+      document.getElementById("btnClearConfirm").addEventListener("click", ()=>{
+        localStorage.removeItem("finsight_storyboard_v1");
+        demoState.csvPreview = [];
+        demoState.transactions = [];
+        demoState.budgets = [
+          { id: "b1", category: "Dining Out", limit: 250 },
+          { id: "b2", category: "Groceries", limit: 350 },
+        ];
+        demoState.anomalies = [
+          { id: "a1", date: isoToday(-2), merchant: "NEW MERCHANT: ZedPay", amount: 89.42, reason: "New merchant + higher than usual", status: "needs_review" }
+        ];
+        save();
+        closeModal();
+        renderAll();
+      });
+    });
+
+    // quick links
+    document.getElementById("btnScenarioSeed").addEventListener("click", ()=>{ seed(); save(); renderAll(); });
+
+    /***********************
+     * Boot
+     ***********************/
+    load();
+
+    // If unlocked from previous session, skip lock screen
+    if(demoState.unlocked){
+      hideLock();
+    }else{
+      showLock();
+    }
+
+    // Initial render
+    renderAll();
+
+    // Default nav
+    setScreen("dashboard");
+
+    // Helpful: seed if empty (optional)
+    // (Keep off by default so user can demo import/receipt flows.)
+
+  </script>
+</body>
+</html>

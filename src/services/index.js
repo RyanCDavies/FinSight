@@ -3,6 +3,7 @@
 // All services use the real SQLite DB via expo-sqlite
 
 import { getDB, generateId, hashPin, saveSession, clearSession } from '../db/database';
+import { emitDataChanged } from '../db/changeEvents';
 import { CategorizationEngine, AnomalyDetectionEngine, ForecastingEngine, RecommendationEngine, SubscriptionEngine } from '../engines';
 
 // ─────────────────────────────────────────────
@@ -71,6 +72,7 @@ export const FinancialDataService = {
       'INSERT INTO transactions (id, profile_id, date, merchant, amount, category_id, note, source, hash, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
       [id, profileId, data.date, data.merchant, data.amount, category_id, data.note || '', data.source || 'manual', data.hash || null, new Date().toISOString()]
     );
+    emitDataChanged();
     return db.getFirstAsync('SELECT * FROM transactions WHERE id = ?', [id]);
   },
 
@@ -79,12 +81,14 @@ export const FinancialDataService = {
     const fields = Object.keys(updates).map(k => `${k} = ?`).join(', ');
     const values = [...Object.values(updates), id];
     await db.runAsync(`UPDATE transactions SET ${fields} WHERE id = ?`, values);
+    emitDataChanged();
     return db.getFirstAsync('SELECT * FROM transactions WHERE id = ?', [id]);
   },
 
   async deleteTransaction(id) {
     const db = await getDB();
     await db.runAsync('DELETE FROM transactions WHERE id = ?', [id]);
+    emitDataChanged();
     return true;
   },
 
@@ -157,6 +161,9 @@ export const ImportIntegrationService = {
       );
       imported++;
     }
+    if (imported > 0) {
+      emitDataChanged();
+    }
     return { imported, duplicates };
   },
 };
@@ -179,11 +186,13 @@ export const BudgetingGoalService = {
        ON CONFLICT(profile_id, category_id, month, year) DO UPDATE SET limit_amount = excluded.limit_amount`,
       [generateId('budget'), profileId, categoryId, month, year, limitAmount, new Date().toISOString()]
     );
+    emitDataChanged();
   },
 
   async deleteBudget(id) {
     const db = await getDB();
     await db.runAsync('DELETE FROM budgets WHERE id = ?', [id]);
+    emitDataChanged();
   },
 
   async getBudgetProgress(profileId, month) {
@@ -307,4 +316,6 @@ export async function seedDemoData(profileId) {
       [generateId('budget'), profileId, catId, mo, yr, limit, new Date().toISOString()]
     );
   }
+
+  emitDataChanged();
 }

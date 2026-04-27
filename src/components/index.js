@@ -4,7 +4,7 @@
 import React from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ActivityIndicator,
-  StyleSheet, Modal as RNModal, ScrollView, Pressable,
+  StyleSheet, Modal as RNModal, ScrollView, Pressable, Platform,
 } from 'react-native';
 import { colors, radius, spacing, font } from '../theme';
 
@@ -129,6 +129,43 @@ export function SectionHeader({ title, action, onAction }) {
 // ─── Bottom Sheet Modal ─────────────────────
 
 export function BottomSheet({ visible, title, onClose, children, footer }) {
+  const isWindows = Platform.OS === 'windows';
+
+  if (!visible) return null;
+
+  const content = (
+    <Pressable
+      style={[styles.modalOverlay, isWindows && styles.centeredModalOverlay]}
+      onPress={onClose}
+    >
+      <Pressable style={[styles.bottomSheet, isWindows && styles.dialogSheet]} onPress={() => {}}>
+        {!isWindows && <View style={styles.sheetHandle} />}
+        <View style={styles.sheetHeader}>
+          <Text style={styles.sheetTitle}>{title}</Text>
+          <TouchableOpacity onPress={onClose}>
+            <Text style={{ color: colors.textMuted, fontSize: 20 }}>✕</Text>
+          </TouchableOpacity>
+        </View>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
+          {children}
+        </ScrollView>
+        {footer && (
+          <View style={styles.sheetFooter}>
+            {footer}
+          </View>
+        )}
+      </Pressable>
+    </Pressable>
+  );
+
+  if (isWindows) {
+    return (
+      <View style={styles.inlineModalHost} pointerEvents="box-none">
+        {content}
+      </View>
+    );
+  }
+
   return (
     <RNModal
       visible={visible}
@@ -136,25 +173,7 @@ export function BottomSheet({ visible, title, onClose, children, footer }) {
       animationType="slide"
       onRequestClose={onClose}
     >
-      <Pressable style={styles.modalOverlay} onPress={onClose}>
-        <Pressable style={styles.bottomSheet} onPress={() => {}}>
-          <View style={styles.sheetHandle} />
-          <View style={styles.sheetHeader}>
-            <Text style={styles.sheetTitle}>{title}</Text>
-            <TouchableOpacity onPress={onClose}>
-              <Text style={{ color: colors.textMuted, fontSize: 20 }}>✕</Text>
-            </TouchableOpacity>
-          </View>
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
-            {children}
-          </ScrollView>
-          {footer && (
-            <View style={styles.sheetFooter}>
-              {footer}
-            </View>
-          )}
-        </Pressable>
-      </Pressable>
+      {content}
     </RNModal>
   );
 }
@@ -248,6 +267,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent:  'flex-end',
   },
+  centeredModalOverlay: {
+    justifyContent: 'center',
+    alignItems:     'center',
+    padding:        spacing.xl,
+  },
+  inlineModalHost: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 999,
+    elevation: 999,
+  },
   bottomSheet: {
     backgroundColor: colors.surface,
     borderTopLeftRadius:  radius.xl,
@@ -257,6 +286,15 @@ const styles = StyleSheet.create({
     maxHeight:       '85%',
     borderTopWidth:  1,
     borderColor:     colors.border,
+  },
+  dialogSheet: {
+    width:          '100%',
+    maxWidth:       560,
+    maxHeight:      '80%',
+    borderRadius:   radius.xl,
+    borderWidth:    1,
+    borderTopWidth: 1,
+    paddingBottom:  spacing.xl,
   },
   sheetHandle: {
     width:           40,

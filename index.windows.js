@@ -1,8 +1,8 @@
+import { AppRegistry } from 'react-native';
 import { Buffer } from 'buffer';
-import { registerRootComponent } from 'expo';
 
 import App from './App';
 
 global.Buffer = global.Buffer || Buffer;
 
-registerRootComponent(App);
+AppRegistry.registerComponent('main', () => App);

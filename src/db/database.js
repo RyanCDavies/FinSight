@@ -9,10 +9,6 @@ import * as SecureStore from 'expo-secure-store';
 
 let _db = null;
 
-// ─────────────────────────────────────────────
-// Database Initialization
-// ─────────────────────────────────────────────
-
 export async function getDB() {
   if (_db) return _db;
   _db = await SQLite.openDatabaseAsync('finsight.db');
@@ -105,20 +101,16 @@ async function initSchema(db) {
   await seedCategories(db);
 }
 
-// ─────────────────────────────────────────────
-// Default Categories Seed
-// ─────────────────────────────────────────────
-
 const DEFAULT_CATEGORIES = [
-  { id: 'cat_food',          name: 'Food & Dining',     icon: '🍔', color: '#f97316', keywords: ['restaurant','cafe','mcdonald','starbucks','pizza','sushi','burger','taco','diner','doordash','ubereats','food'] },
-  { id: 'cat_transport',     name: 'Transportation',    icon: '🚗', color: '#3b82f6', keywords: ['uber','lyft','gas','shell','chevron','parking','transit','metro','bus','train','airline','delta','united'] },
-  { id: 'cat_shopping',      name: 'Shopping',          icon: '🛍️', color: '#a855f7', keywords: ['amazon','target','walmart','costco','nordstrom','macy','ebay','shop','store','mall'] },
-  { id: 'cat_health',        name: 'Health & Medical',  icon: '💊', color: '#10b981', keywords: ['pharmacy','cvs','walgreen','doctor','hospital','clinic','dental','medical'] },
-  { id: 'cat_entertainment', name: 'Entertainment',     icon: '🎬', color: '#ec4899', keywords: ['netflix','spotify','hulu','disney','cinema','theater','concert','game','steam','playstation'] },
-  { id: 'cat_utilities',     name: 'Utilities & Bills', icon: '💡', color: '#f59e0b', keywords: ['electric','water','internet','phone','verizon','att','comcast','bill','utility'] },
-  { id: 'cat_rent',          name: 'Housing & Rent',    icon: '🏠', color: '#6366f1', keywords: ['rent','mortgage','hoa','lease','property'] },
-  { id: 'cat_income',        name: 'Income',            icon: '💰', color: '#22c55e', keywords: ['payroll','salary','deposit','paycheck','direct deposit'] },
-  { id: 'cat_other',         name: 'Other',             icon: '📦', color: '#94a3b8', keywords: [] },
+  { id: 'cat_food',          name: 'Food & Dining',     icon: 'ðŸ”', color: '#f97316', keywords: ['restaurant','cafe','mcdonald','starbucks','pizza','sushi','burger','taco','diner','doordash','ubereats','food'] },
+  { id: 'cat_transport',     name: 'Transportation',    icon: 'ðŸš—', color: '#3b82f6', keywords: ['uber','lyft','gas','shell','chevron','parking','transit','metro','bus','train','airline','delta','united'] },
+  { id: 'cat_shopping',      name: 'Shopping',          icon: 'ðŸ›ï¸', color: '#a855f7', keywords: ['amazon','target','walmart','costco','nordstrom','macy','ebay','shop','store','mall'] },
+  { id: 'cat_health',        name: 'Health & Medical',  icon: 'ðŸ’Š', color: '#10b981', keywords: ['pharmacy','cvs','walgreen','doctor','hospital','clinic','dental','medical'] },
+  { id: 'cat_entertainment', name: 'Entertainment',     icon: 'ðŸŽ¬', color: '#ec4899', keywords: ['netflix','spotify','hulu','disney','cinema','theater','concert','game','steam','playstation'] },
+  { id: 'cat_utilities',     name: 'Utilities & Bills', icon: 'ðŸ’¡', color: '#f59e0b', keywords: ['electric','water','internet','phone','verizon','att','comcast','bill','utility'] },
+  { id: 'cat_rent',          name: 'Housing & Rent',    icon: 'ðŸ ', color: '#6366f1', keywords: ['rent','mortgage','hoa','lease','property'] },
+  { id: 'cat_income',        name: 'Income',            icon: 'ðŸ’°', color: '#22c55e', keywords: ['payroll','salary','deposit','paycheck','direct deposit'] },
+  { id: 'cat_other',         name: 'Other',             icon: 'ðŸ“¦', color: '#94a3b8', keywords: [] },
 ];
 
 async function seedCategories(db) {
@@ -132,10 +124,6 @@ async function seedCategories(db) {
   }
 }
 
-// ─────────────────────────────────────────────
-// Secure PIN storage (uses iOS Keychain / Android Keystore)
-// ─────────────────────────────────────────────
-
 export async function saveSession(profileId) {
   await SecureStore.setItemAsync('finsight_session', profileId);
 }
@@ -147,10 +135,6 @@ export async function getSession() {
 export async function clearSession() {
   await SecureStore.deleteItemAsync('finsight_session');
 }
-
-// ─────────────────────────────────────────────
-// Utility
-// ─────────────────────────────────────────────
 
 export function generateId(prefix = 'id') {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;

@@ -1,0 +1,1661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FinSight — Interactive UX Storyboard</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0e1117;
+    --ink-soft: #2a2f3e;
+    --paper: #f5f2ed;
+    --cream: #ede9e1;
+    --gold: #c9a84c;
+    --gold-light: #e8d08a;
+    --teal: #1a7a6e;
+    --teal-light: #2eb8a6;
+    --teal-pale: #d0f0ec;
+    --red: #c0392b;
+    --red-pale: #fde8e6;
+    --blue: #1e3a8a;
+    --blue-pale: #e0e8f9;
+    --muted: #8a8f9e;
+    --border: #d8d3ca;
+    --shadow: 0 4px 24px rgba(14,17,23,0.10);
+    --shadow-lg: 0 12px 48px rgba(14,17,23,0.15);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Sora', sans-serif;
+    background: var(--ink);
+    color: var(--paper);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── STORYBOARD SHELL ── */
+  .sb-header {
+    background: var(--ink);
+    border-bottom: 1px solid rgba(201,168,76,0.25);
+    padding: 18px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .sb-logo { font-family: 'DM Serif Display', serif; font-size: 1.5rem; color: var(--gold); letter-spacing: -0.02em; }
+  .sb-logo span { color: var(--paper); font-style: italic; }
+  .sb-subtitle { font-size: 0.72rem; font-weight: 300; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-top: 2px; }
+  .sb-badge { background: rgba(201,168,76,0.12); border: 1px solid rgba(201,168,76,0.35); color: var(--gold); font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase; padding: 5px 14px; border-radius: 20px; font-family: 'DM Mono', monospace; }
+
+  /* ── SCENE NAV ── */
+  .scene-nav {
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+    background: rgba(255,255,255,0.03);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    padding: 0 40px;
+    scrollbar-width: none;
+  }
+  .scene-nav::-webkit-scrollbar { display: none; }
+  .scene-btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 14px 20px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .scene-btn:hover { color: var(--paper); }
+  .scene-btn.active { color: var(--gold); border-bottom-color: var(--gold); }
+  .scene-num { background: rgba(201,168,76,0.15); color: var(--gold); border-radius: 50%; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; font-size: 0.6rem; flex-shrink: 0; }
+
+  /* ── MAIN LAYOUT ── */
+  .sb-body {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    min-height: calc(100vh - 111px);
+  }
+
+  /* ── SCENARIO PANEL ── */
+  .scenario-panel {
+    background: rgba(255,255,255,0.02);
+    border-right: 1px solid rgba(255,255,255,0.06);
+    padding: 32px 28px;
+    overflow-y: auto;
+    max-height: calc(100vh - 111px);
+    position: sticky;
+    top: 111px;
+  }
+  .scenario-label { font-family: 'DM Mono', monospace; font-size: 0.62rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold); margin-bottom: 10px; }
+  .scenario-title { font-family: 'DM Serif Display', serif; font-size: 1.5rem; color: var(--paper); line-height: 1.2; margin-bottom: 16px; }
+  .scenario-story {
+    font-size: 0.82rem;
+    line-height: 1.75;
+    color: rgba(245,242,237,0.7);
+    margin-bottom: 24px;
+  }
+  .scenario-story strong { color: var(--paper); font-weight: 600; }
+
+  .why-box {
+    background: rgba(201,168,76,0.08);
+    border: 1px solid rgba(201,168,76,0.2);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+  .why-box-title { font-family: 'DM Mono', monospace; font-size: 0.62rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); margin-bottom: 8px; }
+  .why-box p { font-size: 0.78rem; line-height: 1.65; color: rgba(245,242,237,0.75); }
+
+  .ux-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 24px; }
+  .ux-tag { font-size: 0.65rem; font-family: 'DM Mono', monospace; padding: 4px 10px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1); color: var(--muted); }
+
+  .flow-steps { list-style: none; }
+  .flow-steps li {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 0.78rem;
+    color: rgba(245,242,237,0.65);
+    cursor: pointer;
+    transition: color 0.2s;
+  }
+  .flow-steps li:hover { color: var(--paper); }
+  .flow-steps li.current { color: var(--teal-light); }
+  .flow-step-num { font-family: 'DM Mono', monospace; font-size: 0.65rem; color: var(--gold); min-width: 20px; margin-top: 1px; }
+  .flow-arrow { color: var(--teal-light); margin: 4px 0; padding-left: 20px; font-size: 0.7rem; }
+
+  /* ── DEVICE STAGE ── */
+  .device-stage {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 40px;
+    background: radial-gradient(ellipse at 60% 30%, rgba(26,122,110,0.08) 0%, transparent 60%), var(--ink);
+    overflow-y: auto;
+  }
+
+  .device-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .device-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* ── PHONE FRAME ── */
+  .phone {
+    width: 375px;
+    height: 780px;
+    background: #1a1d26;
+    border-radius: 44px;
+    box-shadow: 0 0 0 2px #2a2d3a, 0 0 0 10px #111318, var(--shadow-lg), 0 0 80px rgba(26,122,110,0.15);
+    overflow: hidden;
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .phone-notch {
+    position: absolute;
+    top: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 120px; height: 30px;
+    background: #111318;
+    border-radius: 0 0 20px 20px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .notch-cam { width: 10px; height: 10px; background: #0a0c10; border-radius: 50%; border: 1.5px solid #2a2d3a; }
+  .notch-speaker { width: 40px; height: 4px; background: #0a0c10; border-radius: 4px; }
+
+  .phone-status {
+    position: absolute;
+    top: 10px; left: 0; right: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 24px;
+    font-size: 0.62rem;
+    font-family: 'DM Mono', monospace;
+    color: rgba(245,242,237,0.5);
+    z-index: 9;
+  }
+
+  .phone-screen {
+    position: absolute;
+    inset: 0;
+    border-radius: 44px;
+    overflow: hidden;
+    display: none;
+    flex-direction: column;
+  }
+  .phone-screen.active { display: flex; }
+
+  /* ── NAV DOTS ── */
+  .nav-dots {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .nav-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .nav-dot.active { background: var(--gold); transform: scale(1.3); }
+
+  /* ── CTA BUTTONS ── */
+  .proto-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 10px 20px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .proto-btn-primary { background: var(--teal); color: white; }
+  .proto-btn-primary:hover { background: var(--teal-light); transform: translateY(-1px); }
+  .proto-btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--paper); }
+  .proto-btn-ghost:hover { background: rgba(255,255,255,0.05); }
+
+  /* ══════════════════════════════════════
+     SCREEN STYLES
+  ══════════════════════════════════════ */
+
+  /* ── SCREEN 1: SPLASH ── */
+  .screen-splash {
+    background: linear-gradient(160deg, #0e1117 0%, #111a28 50%, #0e1a18 100%);
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 40px 32px;
+    gap: 0;
+  }
+  .splash-glow {
+    position: absolute;
+    width: 260px; height: 260px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(26,122,110,0.3) 0%, transparent 70%);
+    top: 50%; left: 50%;
+    transform: translate(-50%, -55%);
+    pointer-events: none;
+  }
+  .splash-icon {
+    width: 72px; height: 72px;
+    background: linear-gradient(135deg, var(--teal), var(--teal-light));
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    margin: 0 auto 24px;
+    box-shadow: 0 0 0 1px rgba(46,184,166,0.3), 0 8px 32px rgba(26,122,110,0.4);
+    position: relative;
+    z-index: 1;
+    animation: pulse-glow 3s ease-in-out infinite;
+  }
+  @keyframes pulse-glow {
+    0%,100% { box-shadow: 0 0 0 1px rgba(46,184,166,0.3), 0 8px 32px rgba(26,122,110,0.4); }
+    50% { box-shadow: 0 0 0 1px rgba(46,184,166,0.5), 0 8px 48px rgba(26,122,110,0.6); }
+  }
+  .splash-logo { font-family: 'DM Serif Display', serif; font-size: 2.4rem; color: var(--paper); letter-spacing: -0.03em; position: relative; z-index: 1; }
+  .splash-logo em { color: var(--teal-light); font-style: normal; }
+  .splash-tagline { font-size: 0.78rem; color: rgba(245,242,237,0.5); margin-top: 8px; margin-bottom: 48px; font-weight: 300; position: relative; z-index: 1; letter-spacing: 0.04em; }
+  .splash-privacy-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(26,122,110,0.15);
+    border: 1px solid rgba(46,184,166,0.25);
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 0.72rem;
+    color: var(--teal-light);
+    margin-bottom: 32px;
+    position: relative;
+    z-index: 1;
+    width: 100%;
+  }
+  .splash-cta {
+    width: 100%;
+    padding: 16px;
+    background: linear-gradient(135deg, var(--teal), var(--teal-light));
+    border: none;
+    border-radius: 14px;
+    color: white;
+    font-family: 'Sora', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    position: relative;
+    z-index: 1;
+    transition: all 0.2s;
+    box-shadow: 0 4px 20px rgba(26,122,110,0.35);
+  }
+  .splash-cta:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(26,122,110,0.5); }
+  .splash-sub { font-size: 0.68rem; color: rgba(245,242,237,0.35); margin-top: 14px; position: relative; z-index: 1; }
+
+  /* ── SCREEN 2: LOGIN ── */
+  .screen-login {
+    background: var(--paper);
+    color: var(--ink);
+    padding: 40px 28px 24px;
+    gap: 0;
+  }
+  .login-back { font-size: 0.8rem; color: var(--teal); cursor: pointer; margin-bottom: 28px; display: flex; align-items: center; gap: 4px; margin-top: 20px; }
+  .login-header { margin-bottom: 32px; }
+  .login-title { font-family: 'DM Serif Display', serif; font-size: 2rem; color: var(--ink); line-height: 1.1; }
+  .login-sub { font-size: 0.78rem; color: var(--muted); margin-top: 6px; }
+  .login-form { display: flex; flex-direction: column; gap: 16px; flex: 1; }
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-label { font-size: 0.72rem; font-weight: 600; color: var(--ink-soft); letter-spacing: 0.04em; }
+  .form-input {
+    padding: 14px 16px;
+    background: white;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    font-family: 'Sora', sans-serif;
+    font-size: 0.85rem;
+    color: var(--ink);
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .form-input:focus { border-color: var(--teal); }
+  .form-input.filled { border-color: var(--teal); background: var(--teal-pale); }
+  .login-btn {
+    width: 100%;
+    padding: 15px;
+    background: var(--ink);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-family: 'Sora', sans-serif;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .login-btn:hover { background: var(--ink-soft); transform: translateY(-1px); }
+  .login-biometric {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 16px;
+  }
+  .login-biometric::before, .login-biometric::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  .biometric-btn {
+    width: 100%;
+    padding: 13px;
+    background: var(--cream);
+    color: var(--ink);
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    font-family: 'Sora', sans-serif;
+    font-size: 0.82rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 8px;
+    transition: all 0.2s;
+  }
+  .biometric-btn:hover { border-color: var(--teal); color: var(--teal); }
+  .security-note {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.67rem;
+    color: var(--muted);
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── SCREEN 3: DASHBOARD ── */
+  .screen-dashboard {
+    background: #f8f6f1;
+    color: var(--ink);
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .dash-header {
+    background: var(--ink);
+    padding: 44px 20px 20px;
+    color: white;
+  }
+  .dash-greeting { font-size: 0.72rem; color: rgba(255,255,255,0.5); font-weight: 300; letter-spacing: 0.04em; }
+  .dash-name { font-family: 'DM Serif Display', serif; font-size: 1.5rem; color: white; }
+  .dash-month { font-size: 0.7rem; color: var(--gold); font-family: 'DM Mono', monospace; letter-spacing: 0.08em; text-transform: uppercase; margin-top: 2px; }
+
+  .balance-card {
+    background: linear-gradient(135deg, var(--teal) 0%, #0f4f47 100%);
+    margin: 16px;
+    border-radius: 16px;
+    padding: 18px 20px;
+    color: white;
+    position: relative;
+    overflow: hidden;
+  }
+  .balance-card::after {
+    content: '';
+    position: absolute;
+    right: -20px; top: -20px;
+    width: 120px; height: 120px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 50%;
+  }
+  .balance-label { font-size: 0.67rem; opacity: 0.65; letter-spacing: 0.08em; text-transform: uppercase; font-family: 'DM Mono', monospace; }
+  .balance-amount { font-family: 'DM Serif Display', serif; font-size: 2rem; margin: 4px 0; letter-spacing: -0.02em; }
+  .balance-meta { display: flex; gap: 16px; font-size: 0.7rem; opacity: 0.7; }
+  .balance-meta span { display: flex; align-items: center; gap: 4px; }
+
+  .dash-scroll { flex: 1; overflow-y: auto; padding: 0 16px 80px; scrollbar-width: none; }
+  .dash-scroll::-webkit-scrollbar { display: none; }
+
+  .section-title { font-size: 0.72rem; font-weight: 700; color: var(--ink-soft); letter-spacing: 0.06em; text-transform: uppercase; margin: 16px 0 10px; display: flex; align-items: center; justify-content: space-between; }
+  .section-link { font-size: 0.68rem; color: var(--teal); font-weight: 400; cursor: pointer; }
+
+  /* Spending Chart */
+  .chart-card {
+    background: white;
+    border-radius: 14px;
+    padding: 16px;
+    box-shadow: 0 1px 8px rgba(0,0,0,0.06);
+    margin-bottom: 12px;
+  }
+  .chart-title { font-size: 0.72rem; font-weight: 600; color: var(--ink-soft); margin-bottom: 12px; }
+  .chart-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    height: 80px;
+  }
+  .chart-bar-wrap { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; }
+  .chart-bar {
+    width: 100%;
+    border-radius: 4px 4px 0 0;
+    transition: all 0.3s;
+    position: relative;
+    cursor: pointer;
+  }
+  .chart-bar:hover { filter: brightness(1.1); }
+  .chart-bar-label { font-size: 0.55rem; color: var(--muted); font-family: 'DM Mono', monospace; }
+
+  /* Quick Actions */
+  .quick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  .qa-card {
+    background: white;
+    border-radius: 14px;
+    padding: 16px;
+    box-shadow: 0 1px 8px rgba(0,0,0,0.06);
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .qa-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
+  .qa-icon { font-size: 1.4rem; }
+  .qa-label { font-size: 0.75rem; font-weight: 600; color: var(--ink); }
+  .qa-sub { font-size: 0.65rem; color: var(--muted); line-height: 1.4; }
+  .qa-card.ai { background: linear-gradient(135deg, #e8f5f3, #d0f0ec); border: 1px solid rgba(26,122,110,0.15); }
+  .qa-card.ai .qa-label { color: var(--teal); }
+
+  /* Recent Transactions */
+  .txn-list { display: flex; flex-direction: column; gap: 0; background: white; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 8px rgba(0,0,0,0.06); }
+  .txn-item { display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-bottom: 1px solid #f3f0ea; cursor: pointer; transition: background 0.15s; }
+  .txn-item:last-child { border-bottom: none; }
+  .txn-item:hover { background: #faf9f6; }
+  .txn-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0; }
+  .txn-info { flex: 1; }
+  .txn-name { font-size: 0.8rem; font-weight: 600; color: var(--ink); }
+  .txn-cat { font-size: 0.65rem; color: var(--muted); margin-top: 1px; }
+  .txn-amount { font-family: 'DM Mono', monospace; font-size: 0.82rem; font-weight: 500; }
+  .txn-amount.debit { color: var(--red); }
+  .txn-amount.credit { color: var(--teal); }
+
+  /* Bottom Nav */
+  .bottom-nav {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: white;
+    border-top: 1px solid var(--border);
+    display: flex;
+    padding: 10px 0 20px;
+    border-radius: 0 0 44px 44px;
+    overflow: hidden;
+  }
+  .bnav-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; padding: 4px 0; }
+  .bnav-icon { font-size: 1.1rem; }
+  .bnav-label { font-size: 0.55rem; font-family: 'DM Mono', monospace; letter-spacing: 0.06em; color: var(--muted); }
+  .bnav-item.active .bnav-label { color: var(--teal); }
+  .bnav-item.active .bnav-icon { filter: none; }
+
+  /* ── SCREEN 4: AI ASSISTANT ── */
+  .screen-ai {
+    background: #0f1520;
+    color: white;
+    flex-direction: column;
+  }
+  .ai-header {
+    padding: 48px 20px 16px;
+    background: linear-gradient(180deg, #0f1520 0%, #0f1520 100%);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .ai-back { font-size: 1.2rem; cursor: pointer; color: rgba(255,255,255,0.5); }
+  .ai-avatar {
+    width: 36px; height: 36px;
+    background: linear-gradient(135deg, var(--teal), var(--teal-light));
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+  }
+  .ai-header-info { flex: 1; }
+  .ai-name { font-size: 0.85rem; font-weight: 600; }
+  .ai-status { font-size: 0.65rem; color: var(--teal-light); display: flex; align-items: center; gap: 4px; }
+  .ai-dot { width: 6px; height: 6px; background: var(--teal-light); border-radius: 50%; animation: blink 1.5s ease-in-out infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .ai-privacy-pill { font-size: 0.6rem; background: rgba(26,122,110,0.2); border: 1px solid rgba(46,184,166,0.3); color: var(--teal-light); padding: 4px 8px; border-radius: 20px; font-family: 'DM Mono', monospace; letter-spacing: 0.06em; }
+
+  .ai-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; scrollbar-width: none; }
+  .ai-messages::-webkit-scrollbar { display: none; }
+
+  .msg { display: flex; flex-direction: column; max-width: 85%; }
+  .msg.assistant { align-self: flex-start; }
+  .msg.user { align-self: flex-end; }
+  .msg-bubble {
+    padding: 12px 15px;
+    border-radius: 14px;
+    font-size: 0.8rem;
+    line-height: 1.6;
+  }
+  .msg.assistant .msg-bubble {
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-bottom-left-radius: 4px;
+    color: rgba(255,255,255,0.9);
+  }
+  .msg.user .msg-bubble {
+    background: linear-gradient(135deg, var(--teal), #0e5a52);
+    color: white;
+    border-bottom-right-radius: 4px;
+  }
+  .msg-time { font-size: 0.58rem; color: rgba(255,255,255,0.25); margin-top: 4px; font-family: 'DM Mono', monospace; }
+  .msg.user .msg-time { text-align: right; }
+
+  .insight-card {
+    background: rgba(201,168,76,0.1);
+    border: 1px solid rgba(201,168,76,0.25);
+    border-radius: 10px;
+    padding: 12px;
+    margin-top: 8px;
+    font-size: 0.75rem;
+    line-height: 1.6;
+    color: rgba(255,255,255,0.8);
+  }
+  .insight-card-title { font-weight: 600; color: var(--gold); font-size: 0.72rem; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+
+  .ai-suggestions {
+    display: flex;
+    gap: 8px;
+    padding: 10px 16px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .ai-suggestions::-webkit-scrollbar { display: none; }
+  .ai-chip {
+    white-space: nowrap;
+    padding: 8px 14px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 20px;
+    font-size: 0.7rem;
+    color: rgba(255,255,255,0.7);
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+  .ai-chip:hover { background: rgba(46,184,166,0.15); border-color: rgba(46,184,166,0.3); color: var(--teal-light); }
+
+  .ai-input-bar {
+    display: flex;
+    gap: 10px;
+    padding: 12px 16px 28px;
+    background: rgba(255,255,255,0.02);
+    border-top: 1px solid rgba(255,255,255,0.06);
+    align-items: flex-end;
+  }
+  .ai-input {
+    flex: 1;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 11px 14px;
+    font-family: 'Sora', sans-serif;
+    font-size: 0.8rem;
+    color: white;
+    outline: none;
+    resize: none;
+  }
+  .ai-send {
+    width: 38px; height: 38px;
+    background: var(--teal);
+    border: none;
+    border-radius: 10px;
+    color: white;
+    font-size: 1rem;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+  .ai-send:hover { background: var(--teal-light); }
+
+  /* ── SCREEN 5: CSV IMPORT ── */
+  .screen-csv {
+    background: var(--paper);
+    color: var(--ink);
+    flex-direction: column;
+  }
+  .csv-header {
+    background: var(--ink);
+    padding: 46px 20px 20px;
+    color: white;
+  }
+  .csv-header-top { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .csv-back-btn { color: rgba(255,255,255,0.5); font-size: 1.1rem; cursor: pointer; }
+  .csv-title { font-family: 'DM Serif Display', serif; font-size: 1.3rem; }
+  .csv-sub { font-size: 0.72rem; color: rgba(255,255,255,0.5); }
+
+  .csv-body { flex: 1; padding: 20px 16px 80px; overflow-y: auto; scrollbar-width: none; }
+  .csv-body::-webkit-scrollbar { display: none; }
+
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 16px;
+    padding: 32px 20px;
+    text-align: center;
+    background: white;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 16px;
+  }
+  .upload-zone:hover { border-color: var(--teal); background: var(--teal-pale); }
+  .upload-zone-icon { font-size: 2.5rem; margin-bottom: 12px; }
+  .upload-zone-title { font-weight: 600; font-size: 0.88rem; color: var(--ink); margin-bottom: 4px; }
+  .upload-zone-sub { font-size: 0.72rem; color: var(--muted); }
+
+  .progress-card {
+    background: white;
+    border-radius: 14px;
+    padding: 16px;
+    box-shadow: 0 1px 8px rgba(0,0,0,0.06);
+    margin-bottom: 12px;
+  }
+  .progress-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .progress-filename { font-size: 0.8rem; font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: 8px; }
+  .progress-size { font-size: 0.65rem; color: var(--muted); font-family: 'DM Mono', monospace; }
+  .progress-bar-wrap { background: var(--cream); border-radius: 4px; height: 6px; overflow: hidden; margin-bottom: 8px; }
+  .progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--teal), var(--teal-light)); border-radius: 4px; transition: width 0.5s; }
+  .progress-status { font-size: 0.68rem; color: var(--muted); }
+
+  .mapping-card {
+    background: white;
+    border-radius: 14px;
+    padding: 16px;
+    box-shadow: 0 1px 8px rgba(0,0,0,0.06);
+    margin-bottom: 12px;
+  }
+  .mapping-title { font-size: 0.8rem; font-weight: 700; color: var(--ink); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .mapping-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--cream);
+    font-size: 0.75rem;
+  }
+  .mapping-row:last-child { border-bottom: none; }
+  .mapping-source { flex: 1; font-family: 'DM Mono', monospace; font-size: 0.7rem; color: var(--muted); }
+  .mapping-arrow { color: var(--teal); }
+  .mapping-target { flex: 1; font-weight: 600; color: var(--ink); }
+  .mapping-check { color: var(--teal); }
+
+  .import-summary {
+    background: var(--teal-pale);
+    border: 1px solid rgba(26,122,110,0.2);
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .import-summary-title { font-size: 0.75rem; font-weight: 700; color: var(--teal); margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+  .import-stat { display: flex; justify-content: space-between; font-size: 0.75rem; padding: 5px 0; border-bottom: 1px solid rgba(26,122,110,0.1); }
+  .import-stat:last-child { border-bottom: none; }
+  .import-stat-label { color: var(--ink-soft); }
+  .import-stat-val { font-family: 'DM Mono', monospace; font-weight: 600; color: var(--teal); }
+
+  .import-btn {
+    width: 100%;
+    padding: 15px;
+    background: var(--teal);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-family: 'Sora', sans-serif;
+    font-weight: 600;
+    font-size: 0.88rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .import-btn:hover { background: var(--teal-light); }
+
+  /* ── SCREEN 6: RECEIPT SCAN ── */
+  .screen-receipt {
+    background: #0a0c10;
+    color: white;
+    flex-direction: column;
+  }
+  .receipt-cam-view {
+    position: relative;
+    height: 320px;
+    background: #050708;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .cam-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .cam-frame {
+    width: 220px; height: 240px;
+    border: 2px solid var(--teal-light);
+    border-radius: 8px;
+    position: relative;
+    box-shadow: 0 0 0 9999px rgba(0,0,0,0.5);
+  }
+  .cam-frame::before, .cam-frame::after {
+    content: '';
+    position: absolute;
+    top: -2px; left: -2px;
+    width: 20px; height: 20px;
+    border-top: 3px solid var(--gold);
+    border-left: 3px solid var(--gold);
+  }
+  .cam-frame::after { top: auto; left: auto; bottom: -2px; right: -2px; border-top: none; border-left: none; border-bottom: 3px solid var(--gold); border-right: 3px solid var(--gold); }
+  .cam-guide { color: white; font-size: 0.7rem; text-align: center; margin-top: 12px; opacity: 0.7; }
+  .cam-controls {
+    position: absolute;
+    bottom: 16px; left: 0; right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+  }
+  .cam-btn {
+    width: 60px; height: 60px;
+    background: white;
+    border: none;
+    border-radius: 50%;
+    font-size: 1.5rem;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+  }
+  .cam-btn:hover { transform: scale(1.05); }
+  .cam-aux { width: 44px; height: 44px; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2); border-radius: 50%; font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+
+  .receipt-processing {
+    flex: 1;
+    padding: 20px 16px 80px;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+  .receipt-processing::-webkit-scrollbar { display: none; }
+
+  .ocr-status {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+    font-size: 0.78rem;
+    color: rgba(255,255,255,0.75);
+  }
+  .ocr-spinner {
+    width: 20px; height: 20px;
+    border: 2px solid rgba(255,255,255,0.15);
+    border-top-color: var(--teal-light);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .ocr-done { color: var(--teal-light); font-size: 1.1rem; flex-shrink: 0; }
+
+  .receipt-confirm-card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px;
+    overflow: hidden;
+    margin-bottom: 14px;
+  }
+  .rccard-header {
+    background: rgba(255,255,255,0.03);
+    padding: 12px 16px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: rgba(255,255,255,0.5);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-family: 'DM Mono', monospace;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .rccard-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 11px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 0.8rem;
+  }
+  .rccard-row:last-child { border-bottom: none; }
+  .rccard-label { color: rgba(255,255,255,0.45); font-size: 0.72rem; }
+  .rccard-value { font-weight: 500; color: white; font-family: 'DM Mono', monospace; font-size: 0.78rem; }
+  .rccard-value.editable { color: var(--teal-light); display: flex; align-items: center; gap: 6px; }
+  .rccard-value .edit-icon { font-size: 0.65rem; opacity: 0.6; }
+  .rccard-value.amount { color: var(--gold); font-size: 0.88rem; font-weight: 600; }
+  .ai-category-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(26,122,110,0.2);
+    border: 1px solid rgba(46,184,166,0.3);
+    border-radius: 20px;
+    padding: 4px 10px;
+    font-size: 0.65rem;
+    color: var(--teal-light);
+  }
+
+  .confirm-btn {
+    width: 100%;
+    padding: 15px;
+    background: linear-gradient(135deg, var(--teal), var(--teal-light));
+    border: none;
+    border-radius: 12px;
+    color: white;
+    font-family: 'Sora', sans-serif;
+    font-weight: 600;
+    font-size: 0.88rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    margin-bottom: 10px;
+  }
+  .confirm-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(26,122,110,0.4); }
+  .discard-btn {
+    width: 100%;
+    padding: 13px;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    color: rgba(255,255,255,0.4);
+    font-family: 'Sora', sans-serif;
+    font-size: 0.82rem;
+    cursor: pointer;
+  }
+
+  /* ── SCREEN 7: SUCCESS ── */
+  .screen-success {
+    background: var(--paper);
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 40px 28px;
+    gap: 0;
+  }
+  .success-ring {
+    width: 88px; height: 88px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--teal), var(--teal-light));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 2.4rem;
+    margin: 0 auto 24px;
+    box-shadow: 0 0 0 12px rgba(26,122,110,0.12);
+    animation: pop 0.4s ease-out;
+  }
+  @keyframes pop { 0%{transform:scale(0.5);opacity:0} 80%{transform:scale(1.1)} 100%{transform:scale(1);opacity:1} }
+  .success-title { font-family: 'DM Serif Display', serif; font-size: 1.8rem; color: var(--ink); margin-bottom: 8px; }
+  .success-sub { font-size: 0.8rem; color: var(--muted); line-height: 1.6; margin-bottom: 32px; }
+  .success-summary {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px;
+    width: 100%;
+    margin-bottom: 24px;
+  }
+  .success-summary-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 0.78rem; border-bottom: 1px solid var(--cream); }
+  .success-summary-row:last-child { border-bottom: none; }
+  .ss-label { color: var(--muted); }
+  .ss-val { font-weight: 600; color: var(--ink); font-family: 'DM Mono', monospace; }
+  .success-home-btn {
+    width: 100%;
+    padding: 15px;
+    background: var(--ink);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-family: 'Sora', sans-serif;
+    font-weight: 600;
+    font-size: 0.88rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .success-home-btn:hover { background: var(--ink-soft); }
+
+  /* ── ANNOTATIONS ── */
+  .annotation-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 0 40px 32px;
+    margin-top: 20px;
+  }
+  .annotation {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+  }
+  .ann-num {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--gold);
+    background: rgba(201,168,76,0.1);
+    border: 1px solid rgba(201,168,76,0.25);
+    border-radius: 50%;
+    width: 22px; height: 22px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .ann-text { font-size: 0.75rem; color: rgba(245,242,237,0.6); line-height: 1.6; }
+  .ann-text strong { color: var(--paper); }
+
+  /* ── SCREEN SECTIONS (hidden) ── */
+  .scene { display: none; }
+  .scene.active { display: flex; flex-direction: column; height: 100%; }
+
+  /* Phone header row */
+  .phone-header-bar { display: flex; justify-content: space-between; align-items: center; padding: 44px 20px 8px; }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .sb-body { grid-template-columns: 1fr; }
+    .scenario-panel { position: static; max-height: none; border-right: none; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .device-stage { padding: 24px 16px; }
+    .phone { width: 320px; height: 660px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<header class="sb-header">
+  <div>
+    <div class="sb-logo">Fin<em>Sight</em></div>
+    <div class="sb-subtitle">Interactive UX Storyboard · Proof of Concept</div>
+  </div>
+  <div class="sb-badge">v0.1 Prototype</div>
+</header>
+
+<!-- ── SCENE NAV ── -->
+<nav class="scene-nav">
+  <button class="scene-btn active" onclick="setScene(0)"><span class="scene-num">1</span>Splash</button>
+  <button class="scene-btn" onclick="setScene(1)"><span class="scene-num">2</span>Login</button>
+  <button class="scene-btn" onclick="setScene(2)"><span class="scene-num">3</span>Dashboard</button>
+  <button class="scene-btn" onclick="setScene(3)"><span class="scene-num">4</span>AI Assistant</button>
+  <button class="scene-btn" onclick="setScene(4)"><span class="scene-num">5</span>CSV Import</button>
+  <button class="scene-btn" onclick="setScene(5)"><span class="scene-num">6</span>Receipt Scan</button>
+  <button class="scene-btn" onclick="setScene(6)"><span class="scene-num">7</span>Success</button>
+</nav>
+
+<!-- ── BODY ── -->
+<div class="sb-body">
+
+  <!-- LEFT: SCENARIO PANEL -->
+  <aside class="scenario-panel" id="scenario-panel">
+    <!-- populated by JS -->
+  </aside>
+
+  <!-- RIGHT: DEVICE STAGE -->
+  <main class="device-stage">
+    <div class="device-wrap">
+      <div class="device-label">Interactive Prototype · Click elements to navigate</div>
+
+      <!-- PHONE FRAME -->
+      <div class="phone">
+        <div class="phone-notch">
+          <div class="notch-speaker"></div>
+          <div class="notch-cam"></div>
+        </div>
+        <div class="phone-status">
+          <span>9:41</span>
+          <span>●●●●◯ LTE</span>
+          <span>⚡ 84%</span>
+        </div>
+
+        <!-- ── SCREEN 1: SPLASH ── -->
+        <div class="phone-screen screen-splash active" id="screen-0">
+          <div class="splash-glow"></div>
+          <div class="splash-icon">📊</div>
+          <div class="splash-logo">Fin<em>Sight</em></div>
+          <div class="splash-tagline">Your finances. Your device. Your rules.</div>
+          <div class="splash-privacy-badge">
+            🔒 100% on-device — no data ever leaves your phone
+          </div>
+          <button class="splash-cta" onclick="goTo(1)">Get Started</button>
+          <div class="splash-sub">Already have an account? <span style="color:var(--teal-light);cursor:pointer" onclick="goTo(1)">Sign in →</span></div>
+        </div>
+
+        <!-- ── SCREEN 2: LOGIN ── -->
+        <div class="phone-screen screen-login" id="screen-1">
+          <div class="login-back" onclick="goTo(0)">← Back</div>
+          <div class="login-header">
+            <div class="login-title">Welcome<br>back.</div>
+            <div class="login-sub">Your data is encrypted and waiting.</div>
+          </div>
+          <div class="login-form">
+            <div class="form-group">
+              <label class="form-label">Username</label>
+              <input class="form-input filled" value="alex.morgan" type="text" readonly>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Password</label>
+              <input class="form-input filled" value="••••••••••" type="password" readonly>
+            </div>
+            <button class="login-btn" onclick="goTo(2)">🔓 Unlock FinSight</button>
+            <div class="login-biometric">or use biometrics</div>
+            <button class="biometric-btn" onclick="goTo(2)">🪪 Face ID / Fingerprint</button>
+            <div class="security-note">
+              🔐 <span>Your password decrypts data locally. FinSight never sees or stores your credentials.</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── SCREEN 3: DASHBOARD ── -->
+        <div class="phone-screen screen-dashboard" id="screen-2">
+          <div class="dash-header">
+            <div class="dash-greeting">Good morning,</div>
+            <div class="dash-name">Alex Morgan</div>
+            <div class="dash-month">March 2026</div>
+          </div>
+
+          <div style="padding:0 16px; margin-top:-1px;">
+            <div class="balance-card">
+              <div class="balance-label">Monthly Spending</div>
+              <div class="balance-amount">$2,347</div>
+              <div class="balance-meta">
+                <span>📉 $183 under budget</span>
+                <span>🗓 22 days in</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="dash-scroll">
+            <div class="section-title">Spending Overview <span class="section-link">View all →</span></div>
+            <div class="chart-card">
+              <div class="chart-title">Monthly Expenses — Last 6 Months</div>
+              <div class="chart-bars">
+                <div class="chart-bar-wrap">
+                  <div class="chart-bar" style="height:48px;background:#d0f0ec;"></div>
+                  <div class="chart-bar-label">OCT</div>
+                </div>
+                <div class="chart-bar-wrap">
+                  <div class="chart-bar" style="height:62px;background:#a8ddd8;"></div>
+                  <div class="chart-bar-label">NOV</div>
+                </div>
+                <div class="chart-bar-wrap">
+                  <div class="chart-bar" style="height:75px;background:#6bc8bf;"></div>
+                  <div class="chart-bar-label">DEC</div>
+                </div>
+                <div class="chart-bar-wrap">
+                  <div class="chart-bar" style="height:52px;background:#2eb8a6;"></div>
+                  <div class="chart-bar-label">JAN</div>
+                </div>
+                <div class="chart-bar-wrap">
+                  <div class="chart-bar" style="height:58px;background:#2eb8a6;"></div>
+                  <div class="chart-bar-label">FEB</div>
+                </div>
+                <div class="chart-bar-wrap">
+                  <div class="chart-bar" style="height:44px;background:linear-gradient(180deg,var(--teal),var(--teal-light));box-shadow:0 0 10px rgba(46,184,166,0.4);"></div>
+                  <div class="chart-bar-label" style="color:var(--teal);font-weight:700;">MAR</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="section-title">Quick Actions</div>
+            <div class="quick-actions">
+              <div class="qa-card ai" onclick="goTo(3)">
+                <div class="qa-icon">🤖</div>
+                <div class="qa-label">AI Assistant</div>
+                <div class="qa-sub">Ask about your spending habits</div>
+              </div>
+              <div class="qa-card" onclick="goTo(4)">
+                <div class="qa-icon">📥</div>
+                <div class="qa-label">Import CSV</div>
+                <div class="qa-sub">Upload bank statement</div>
+              </div>
+              <div class="qa-card" onclick="goTo(5)">
+                <div class="qa-icon">📷</div>
+                <div class="qa-label">Scan Receipt</div>
+                <div class="qa-sub">Capture & auto-fill</div>
+              </div>
+              <div class="qa-card">
+                <div class="qa-icon">📊</div>
+                <div class="qa-label">Budgets</div>
+                <div class="qa-sub">Track & set limits</div>
+              </div>
+            </div>
+
+            <div class="section-title">Recent Transactions <span class="section-link">See all →</span></div>
+            <div class="txn-list">
+              <div class="txn-item">
+                <div class="txn-icon" style="background:#fef3c7;">🛒</div>
+                <div class="txn-info">
+                  <div class="txn-name">Whole Foods Market</div>
+                  <div class="txn-cat">Groceries · Today</div>
+                </div>
+                <div class="txn-amount debit">−$67.43</div>
+              </div>
+              <div class="txn-item">
+                <div class="txn-icon" style="background:#ede9fe;">🎬</div>
+                <div class="txn-info">
+                  <div class="txn-name">Netflix</div>
+                  <div class="txn-cat">Entertainment · Yesterday</div>
+                </div>
+                <div class="txn-amount debit">−$15.99</div>
+              </div>
+              <div class="txn-item">
+                <div class="txn-icon" style="background:#d1fae5;">⚡</div>
+                <div class="txn-info">
+                  <div class="txn-name">City Electric Co.</div>
+                  <div class="txn-cat">Utilities · Mar 2</div>
+                </div>
+                <div class="txn-amount debit">−$88.20</div>
+              </div>
+              <div class="txn-item">
+                <div class="txn-icon" style="background:#dbeafe;">☕</div>
+                <div class="txn-info">
+                  <div class="txn-name">Blue Bottle Coffee</div>
+                  <div class="txn-cat">Dining · Mar 1</div>
+                </div>
+                <div class="txn-amount debit">−$6.50</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bottom-nav">
+            <div class="bnav-item active">
+              <div class="bnav-icon">🏠</div>
+              <div class="bnav-label">Home</div>
+            </div>
+            <div class="bnav-item" onclick="goTo(3)">
+              <div class="bnav-icon">🤖</div>
+              <div class="bnav-label">Finn AI</div>
+            </div>
+            <div class="bnav-item">
+              <div class="bnav-icon">📊</div>
+              <div class="bnav-label">Analytics</div>
+            </div>
+            <div class="bnav-item">
+              <div class="bnav-icon">⚙️</div>
+              <div class="bnav-label">Settings</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── SCREEN 4: AI ASSISTANT ── -->
+        <div class="phone-screen screen-ai" id="screen-3">
+          <div class="ai-header">
+            <div class="ai-back" onclick="goTo(2)">←</div>
+            <div class="ai-avatar">✦</div>
+            <div class="ai-header-info">
+              <div class="ai-name">Finn — Financial AI</div>
+              <div class="ai-status"><span class="ai-dot"></span> On-device · Private</div>
+            </div>
+            <div class="ai-privacy-pill">🔒 Local</div>
+          </div>
+
+          <div class="ai-messages">
+            <div class="msg assistant">
+              <div class="msg-bubble">
+                Hi Alex! I've analysed your March spending so far. You're tracking <strong>$183 under budget</strong> — great work. Would you like a breakdown?
+                <div class="insight-card">
+                  <div class="insight-card-title">💡 Spending Insight</div>
+                  Your dining expenses are up 34% vs last month — mostly coffee shops. Cutting back by 3–4 visits per week could save ~$60/month.
+                </div>
+              </div>
+              <div class="msg-time">9:41 AM</div>
+            </div>
+
+            <div class="msg user">
+              <div class="msg-bubble">Where am I overspending the most?</div>
+              <div class="msg-time">9:42 AM</div>
+            </div>
+
+            <div class="msg assistant">
+              <div class="msg-bubble">
+                Based on your last 90 days, <strong>Dining & Coffee</strong> is your fastest-growing category (+34%). Groceries and Utilities remain stable. Your subscriptions total <strong>$87/month</strong> — I noticed two you haven't used in 30+ days.
+              </div>
+              <div class="msg-time">9:42 AM</div>
+            </div>
+
+            <div class="msg user">
+              <div class="msg-bubble">Can you predict my spending for the rest of March?</div>
+              <div class="msg-time">9:43 AM</div>
+            </div>
+
+            <div class="msg assistant">
+              <div class="msg-bubble">
+                Based on your historical patterns, I estimate you'll spend approximately <strong>$3,100–$3,300</strong> by end of March — around <strong>$400 over budget</strong> if current dining trends continue. I'd recommend setting a $40 weekly dining cap.
+              </div>
+              <div class="msg-time">9:43 AM</div>
+            </div>
+          </div>
+
+          <div class="ai-suggestions">
+            <div class="ai-chip">Savings tips 💰</div>
+            <div class="ai-chip">This month vs last</div>
+            <div class="ai-chip">Recurring payments</div>
+            <div class="ai-chip">Set a budget</div>
+          </div>
+
+          <div class="ai-input-bar">
+            <input class="ai-input" placeholder="Ask Finn anything..." />
+            <button class="ai-send">↑</button>
+          </div>
+        </div>
+
+        <!-- ── SCREEN 5: CSV IMPORT ── -->
+        <div class="phone-screen screen-csv" id="screen-4">
+          <div class="csv-header">
+            <div class="csv-header-top">
+              <div class="csv-back-btn" onclick="goTo(2)">←</div>
+              <div>
+                <div class="csv-title">Import CSV</div>
+                <div class="csv-sub">Upload your bank statement</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="csv-body">
+            <div class="upload-zone">
+              <div class="upload-zone-icon">📄</div>
+              <div class="upload-zone-title">Drop your CSV file here</div>
+              <div class="upload-zone-sub">Supports most bank export formats<br>Files stay on your device</div>
+            </div>
+
+            <div class="progress-card">
+              <div class="progress-header">
+                <div class="progress-filename">📄 <span>march_statement.csv</span></div>
+                <div class="progress-size">42 KB</div>
+              </div>
+              <div class="progress-bar-wrap">
+                <div class="progress-bar-fill" style="width:100%;"></div>
+              </div>
+              <div class="progress-status">✅ 247 transactions parsed — 3 duplicates removed</div>
+            </div>
+
+            <div class="mapping-card">
+              <div class="mapping-title">🗂 Column Mapping</div>
+              <div class="mapping-row">
+                <div class="mapping-source">Date</div>
+                <div class="mapping-arrow">→</div>
+                <div class="mapping-target">Transaction Date</div>
+                <div class="mapping-check">✓</div>
+              </div>
+              <div class="mapping-row">
+                <div class="mapping-source">Description</div>
+                <div class="mapping-arrow">→</div>
+                <div class="mapping-target">Merchant Name</div>
+                <div class="mapping-check">✓</div>
+              </div>
+              <div class="mapping-row">
+                <div class="mapping-source">Debit</div>
+                <div class="mapping-arrow">→</div>
+                <div class="mapping-target">Amount</div>
+                <div class="mapping-check">✓</div>
+              </div>
+              <div class="mapping-row">
+                <div class="mapping-source">Category</div>
+                <div class="mapping-arrow">→</div>
+                <div class="mapping-target">Auto-categorise ✦</div>
+                <div class="mapping-check">✓</div>
+              </div>
+            </div>
+
+            <div class="import-summary">
+              <div class="import-summary-title">📊 Import Preview</div>
+              <div class="import-stat">
+                <span class="import-stat-label">Transactions found</span>
+                <span class="import-stat-val">247</span>
+              </div>
+              <div class="import-stat">
+                <span class="import-stat-label">Duplicates detected</span>
+                <span class="import-stat-val">3 removed</span>
+              </div>
+              <div class="import-stat">
+                <span class="import-stat-label">Date range</span>
+                <span class="import-stat-val">Mar 1–22</span>
+              </div>
+              <div class="import-stat">
+                <span class="import-stat-label">Total spent</span>
+                <span class="import-stat-val">$2,347.18</span>
+              </div>
+              <div class="import-stat">
+                <span class="import-stat-label">Encryption</span>
+                <span class="import-stat-val">AES-256 ✓</span>
+              </div>
+            </div>
+
+            <button class="import-btn" onclick="goTo(6)">
+              🔐 Encrypt & Import to FinSight
+            </button>
+          </div>
+        </div>
+
+        <!-- ── SCREEN 6: RECEIPT SCAN ── -->
+        <div class="phone-screen screen-receipt" id="screen-5">
+          <div class="receipt-cam-view">
+            <div style="position:absolute;inset:0;background:linear-gradient(180deg,#111 0%,#1a2212 50%,#111 100%);display:flex;align-items:center;justify-content:center;">
+              <div style="font-size:4rem;opacity:0.15;">🧾</div>
+            </div>
+            <div style="position:absolute;top:12px;left:0;right:0;display:flex;justify-content:space-between;padding:0 16px;align-items:center;margin-top:40px;">
+              <div style="color:rgba(255,255,255,0.5);cursor:pointer;font-size:0.9rem;" onclick="goTo(2)">✕</div>
+              <div style="font-size:0.72rem;color:rgba(255,255,255,0.6);font-family:'DM Mono',monospace;letter-spacing:0.08em;">SCAN RECEIPT</div>
+              <div style="font-size:0.9rem;">⚡</div>
+            </div>
+            <div class="cam-overlay">
+              <div style="display:flex;flex-direction:column;align-items:center;">
+                <div class="cam-frame"></div>
+                <div class="cam-guide">Position receipt within the frame</div>
+              </div>
+            </div>
+            <div class="cam-controls">
+              <div class="cam-aux">🖼</div>
+              <button class="cam-btn" onclick="showReceiptResult()">📷</button>
+              <div class="cam-aux">🔦</div>
+            </div>
+          </div>
+
+          <div class="receipt-processing" id="receipt-pre">
+            <div style="font-family:'DM Serif Display',serif;font-size:1.2rem;color:white;margin-bottom:4px;padding-top:4px;">Capture a Receipt</div>
+            <div style="font-size:0.75rem;color:rgba(255,255,255,0.45);margin-bottom:20px;">OCR will auto-fill transaction details. All processing happens on-device.</div>
+            <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;display:flex;gap:12px;align-items:flex-start;">
+              <div style="font-size:1.4rem;flex-shrink:0;">🔒</div>
+              <div>
+                <div style="font-size:0.78rem;font-weight:600;color:white;margin-bottom:4px;">On-Device OCR</div>
+                <div style="font-size:0.7rem;color:rgba(255,255,255,0.5);line-height:1.6;">Receipt images are processed locally and never uploaded to any server.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="receipt-processing" id="receipt-post" style="display:none;">
+            <div class="ocr-status">
+              <div class="ocr-done">✅</div>
+              <span>OCR complete — review and confirm details below</span>
+            </div>
+
+            <div class="receipt-confirm-card">
+              <div class="rccard-header">Extracted Data</div>
+              <div class="rccard-row">
+                <div class="rccard-label">Merchant</div>
+                <div class="rccard-value editable">Whole Foods Market <span class="edit-icon">✏️</span></div>
+              </div>
+              <div class="rccard-row">
+                <div class="rccard-label">Date</div>
+                <div class="rccard-value editable">Mar 04, 2026 <span class="edit-icon">✏️</span></div>
+              </div>
+              <div class="rccard-row">
+                <div class="rccard-label">Total Amount</div>
+                <div class="rccard-value amount">$67.43</div>
+              </div>
+              <div class="rccard-row">
+                <div class="rccard-label">Category (AI)</div>
+                <div class="rccard-value">
+                  <div class="ai-category-badge">✦ Groceries</div>
+                </div>
+              </div>
+              <div class="rccard-row">
+                <div class="rccard-label">Items Detected</div>
+                <div class="rccard-value" style="color:rgba(255,255,255,0.6);">14 line items</div>
+              </div>
+            </div>
+
+            <button class="confirm-btn" onclick="goTo(6)">✅ Confirm & Save Encrypted</button>
+            <button class="discard-btn">Discard & Re-scan</button>
+          </div>
+        </div>
+
+        <!-- ── SCREEN 7: SUCCESS ── -->
+        <div class="phone-screen screen-success" id="screen-6">
+          <div class="success-ring">✓</div>
+          <div class="success-title">All done!</div>
+          <div class="success-sub">Your data has been encrypted and<br>saved securely on your device.</div>
+          <div class="success-summary">
+            <div class="success-summary-row">
+              <span class="ss-label">Transactions saved</span>
+              <span class="ss-val">247</span>
+            </div>
+            <div class="success-summary-row">
+              <span class="ss-label">Encryption</span>
+              <span class="ss-val">AES-256 ✓</span>
+            </div>
+            <div class="success-summary-row">
+              <span class="ss-label">External upload</span>
+              <span class="ss-val">None ✓</span>
+            </div>
+            <div class="success-summary-row">
+              <span class="ss-label">Dashboard updated</span>
+              <span class="ss-val">Yes ✓</span>
+            </div>
+          </div>
+          <button class="success-home-btn" onclick="goTo(2)">← Back to Dashboard</button>
+        </div>
+
+      </div><!-- /phone -->
+
+      <!-- NAV DOTS -->
+      <div class="nav-dots" id="nav-dots">
+        <div class="nav-dot active" onclick="goTo(0)"></div>
+        <div class="nav-dot" onclick="goTo(1)"></div>
+        <div class="nav-dot" onclick="goTo(2)"></div>
+        <div class="nav-dot" onclick="goTo(3)"></div>
+        <div class="nav-dot" onclick="goTo(4)"></div>
+        <div class="nav-dot" onclick="goTo(5)"></div>
+        <div class="nav-dot" onclick="goTo(6)"></div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<!-- ── SCENARIO DATA ── -->
+<script>
+const SCENES = [
+  {
+    label: "Screen 1 of 7",
+    title: "First Launch & Brand Impression",
+    story: `<strong>Alex</strong> downloads FinSight after reading an article about banking apps selling user data. She opens the app for the first time. The splash screen immediately communicates the app's core promise — <strong>privacy-first, on-device storage</strong> — before she's even touched a feature.`,
+    why: "The splash screen exists to build trust before asking for anything. A privacy-conscious user needs to feel safe within the first 3 seconds, or they'll delete the app.",
+    tags: ["First Impression", "Trust Signal", "Brand Identity", "Privacy Promise"],
+    flow: [
+      { label: "App opens to animated splash", current: true },
+      { label: "Privacy badge reinforces local storage" },
+      { label: "Single CTA reduces decision fatigue" },
+      { label: "→ Tap 'Get Started' to continue" }
+    ]
+  },
+  {
+    label: "Screen 2 of 7",
+    title: "Secure Login & Encryption Gate",
+    story: `<strong>Alex</strong> returns to FinSight after work. She enters her username and password. She understands — from the note at the bottom — that this password <strong>decrypts her data locally</strong>. FinSight itself never sees her credentials or her financial information.`,
+    why: "The login screen is the encryption gate. It clearly communicates that authentication = decryption, not just access control. This educates users about the security model and builds confidence.",
+    tags: ["Authentication", "Encryption UX", "Security Model", "Biometrics"],
+    flow: [
+      { label: "Username + password fields" },
+      { label: "Biometric shortcut (Face ID)" },
+      { label: "Security note explains local decryption", current: true },
+      { label: "→ Tap 'Unlock' to proceed to Dashboard" }
+    ]
+  },
+  {
+    label: "Screen 3 of 7",
+    title: "Dashboard — Monthly Overview",
+    story: `Alex unlocks the app and immediately sees <strong>March's spending summary</strong>. The balance card shows she's $183 under budget — a small win. The bar chart shows the last 6 months at a glance. She can jump straight into the AI assistant, scan a receipt, or import her CSV — all from this one screen.`,
+    why: "The dashboard is the command center. It must deliver actionable information in under 5 seconds and surface every core feature within one tap. The monthly chart is the primary deliverable.",
+    tags: ["Home Screen", "Spending Chart", "Quick Actions", "Transaction Feed"],
+    flow: [
+      { label: "Balance card: monthly spending vs budget", current: true },
+      { label: "6-month bar chart overview" },
+      { label: "Quick action grid (AI / CSV / Receipt / Budget)" },
+      { label: "Recent transactions feed" },
+      { label: "→ Tap any Quick Action to navigate" }
+    ]
+  },
+  {
+    label: "Screen 4 of 7",
+    title: "AI Financial Assistant — Finn",
+    story: `Alex asks Finn, the on-device AI, <em>"Where am I overspending the most?"</em> Finn responds instantly without connecting to any server. It identifies her coffee habit as the fastest-growing expense and predicts she'll exceed her March budget if the trend continues. <strong>All analysis runs locally.</strong>`,
+    why: "Finn exists to turn raw transaction data into actionable advice. The 'On-device · Private' badge must be visible at all times — this is a key differentiator that anxiety-prone users need constant reassurance of.",
+    tags: ["AI Chat", "Spending Insights", "Predictions", "On-Device LLM"],
+    flow: [
+      { label: "Proactive greeting with spending insight", current: true },
+      { label: "User asks natural language questions" },
+      { label: "Finn identifies overspending patterns" },
+      { label: "Spending forecast for rest of month" },
+      { label: "Quick-reply chips for common queries" }
+    ]
+  },
+  {
+    label: "Screen 5 of 7",
+    title: "CSV Import — Bank Statement Upload",
+    story: `Alex downloads her monthly CSV from her bank's website and imports it into FinSight. The app detects column headers automatically, removes 3 duplicates, and shows her a preview of the <strong>247 transactions</strong> before anything is saved. She confirms — and the data is encrypted at rest immediately.`,
+    why: "CSV import is the primary data entry method. Users need to feel in control: see what's being imported, understand how columns are mapped, and confirm before commit. The encryption confirmation at the end closes the trust loop.",
+    tags: ["Data Import", "Column Mapping", "Duplicate Detection", "Encryption Confirm"],
+    flow: [
+      { label: "Upload zone (drag & drop or file picker)" },
+      { label: "Parse progress + duplicate removal" },
+      { label: "Column mapping with auto-detection", current: true },
+      { label: "Import preview: counts, totals, date range" },
+      { label: "→ Tap 'Encrypt & Import' to save" }
+    ]
+  },
+  {
+    label: "Screen 6 of 7",
+    title: "Receipt Scanner — OCR Capture",
+    story: `Alex buys groceries and snaps a photo of her receipt instead of manually entering the purchase. The <strong>on-device OCR</strong> reads the merchant name, date, and total instantly. Finn's AI suggests "Groceries" as the category. Alex reviews the extracted data, taps Confirm, and the transaction is encrypted and stored.`,
+    why: "Manual data entry is the biggest friction point for users. Receipt scanning eliminates that barrier. The confirmation screen is critical — users must be able to verify and edit OCR output before committing, as OCR is not perfect.",
+    tags: ["Camera OCR", "Auto-fill", "AI Categorisation", "Confirmation Flow"],
+    flow: [
+      { label: "Camera viewfinder with alignment frame" },
+      { label: "Tap capture → OCR processes on-device", current: true },
+      { label: "Confirmation card with extracted fields" },
+      { label: "Editable fields for corrections" },
+      { label: "→ Tap 'Confirm & Save' to encrypt + store" }
+    ]
+  },
+  {
+    label: "Screen 7 of 7",
+    title: "Success State — Encrypted & Stored",
+    story: `After importing her CSV or confirming a receipt, Alex sees a clean success screen. It summarises exactly what was saved, confirms encryption status, and explicitly states <strong>"External upload: None ✓"</strong> — a key trust signal for privacy-first users. One tap takes her back to the updated dashboard.`,
+    why: "The success screen closes the user loop. For privacy-conscious users, explicitly confirming 'no external upload' is not just reassuring — it's proof that the privacy promise was kept. Every action deserves a clear ending.",
+    tags: ["Success State", "Data Confirmation", "Privacy Proof", "Return to Home"],
+    flow: [
+      { label: "Animated success checkmark" },
+      { label: "Summary: transactions saved, encryption status", current: true },
+      { label: '"External upload: None" confirmation' },
+      { label: "→ Tap to return to refreshed Dashboard" }
+    ]
+  }
+];
+
+let currentScene = 0;
+
+function renderScenario(idx) {
+  const s = SCENES[idx];
+  const flowHTML = s.flow.map((f, i) => `
+    <li class="${f.current ? 'current' : ''}" onclick="setScene(${idx})">
+      <span class="flow-step-num">${String(i+1).padStart(2,'0')}</span>
+      <span>${f.label}</span>
+    </li>
+    ${f.current ? `<li class="flow-arrow" style="cursor:default;">▼ You are here</li>` : ''}
+  `).join('');
+
+  const tagsHTML = s.tags.map(t => `<span class="ux-tag">${t}</span>`).join('');
+
+  document.getElementById('scenario-panel').innerHTML = `
+    <div class="scenario-label">${s.label}</div>
+    <div class="scenario-title">${s.title}</div>
+    <div class="scenario-story">${s.story}</div>
+    <div class="why-box">
+      <div class="why-box-title">💡 Why this screen exists</div>
+      <p>${s.why}</p>
+    </div>
+    <div class="ux-tags">${tagsHTML}</div>
+    <div class="scenario-label" style="margin-bottom:8px;">User Flow</div>
+    <ul class="flow-steps">${flowHTML}</ul>
+  `;
+}
+
+function setScene(idx) {
+  currentScene = idx;
+
+  // Update nav buttons
+  document.querySelectorAll('.scene-btn').forEach((b, i) => {
+    b.classList.toggle('active', i === idx);
+  });
+
+  // Update dots
+  document.querySelectorAll('.nav-dot').forEach((d, i) => {
+    d.classList.toggle('active', i === idx);
+  });
+
+  // Show correct screen
+  document.querySelectorAll('.phone-screen').forEach((s, i) => {
+    s.classList.toggle('active', i === idx);
+  });
+
+  renderScenario(idx);
+}
+
+function goTo(idx) {
+  setScene(idx);
+  // Scroll scene nav into view
+  const btn = document.querySelectorAll('.scene-btn')[idx];
+  if (btn) btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+}
+
+function showReceiptResult() {
+  document.getElementById('receipt-pre').style.display = 'none';
+  document.getElementById('receipt-post').style.display = 'block';
+}
+
+// Init
+renderScenario(0);
+</script>
+</body>
+</html>

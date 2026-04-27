@@ -1,0 +1,319 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>FinSight – Minimal Prototype</title>
+
+<style>
+:root{
+  --bg:#0f1324;
+  --panel:rgba(255,255,255,.05);
+  --line:rgba(255,255,255,.08);
+  --text:#eef1ff;
+  --muted:#9aa3c7;
+  --accent:#6ea8ff;
+  --good:#4fe28c;
+  --warn:#ffd37a;
+  --bad:#ff6f86;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto;
+  background:var(--bg);
+  color:var(--text);
+}
+
+/* ---------- LOGIN ---------- */
+
+.login{
+  position:fixed;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:var(--bg);
+}
+
+.login-card{
+  width:420px;
+  padding:32px;
+  border-radius:20px;
+  background:var(--panel);
+  border:1px solid var(--line);
+}
+
+.login h1{
+  margin:0 0 8px 0;
+  font-size:20px;
+}
+
+.login p{
+  color:var(--muted);
+  font-size:13px;
+  margin-bottom:20px;
+}
+
+input{
+  width:100%;
+  padding:12px;
+  border-radius:12px;
+  border:1px solid var(--line);
+  background:rgba(255,255,255,.03);
+  color:var(--text);
+  outline:none;
+}
+
+button{
+  padding:10px 16px;
+  border-radius:12px;
+  border:1px solid var(--line);
+  background:rgba(255,255,255,.05);
+  color:var(--text);
+  cursor:pointer;
+}
+
+button.primary{
+  background:var(--accent);
+  border:none;
+  color:#000;
+  font-weight:600;
+}
+
+/* ---------- APP LAYOUT ---------- */
+
+.app{
+  display:none;
+  height:100vh;
+}
+
+.sidebar{
+  width:70px;
+  border-right:1px solid var(--line);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  padding-top:20px;
+}
+
+.nav-btn{
+  width:44px;
+  height:44px;
+  margin-bottom:14px;
+  border-radius:12px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:transparent;
+  border:none;
+  color:var(--muted);
+  font-size:18px;
+}
+
+.nav-btn.active{
+  background:var(--panel);
+  color:var(--text);
+}
+
+.main{
+  flex:1;
+  padding:40px;
+  overflow:auto;
+}
+
+h2{
+  margin-top:0;
+  font-weight:600;
+}
+
+.section{
+  display:none;
+}
+
+.section.active{
+  display:block;
+}
+
+.card{
+  padding:20px;
+  border-radius:16px;
+  background:var(--panel);
+  border:1px solid var(--line);
+  margin-bottom:20px;
+}
+
+.muted{ color:var(--muted); font-size:13px; }
+
+.tag{
+  padding:4px 8px;
+  border-radius:20px;
+  font-size:12px;
+  border:1px solid var(--line);
+}
+
+.tag.good{ border-color:var(--good); color:var(--good);}
+.tag.warn{ border-color:var(--warn); color:var(--warn);}
+.tag.bad{ border-color:var(--bad); color:var(--bad);}
+
+.row{ display:flex; gap:12px; flex-wrap:wrap; }
+.flex{ display:flex; justify-content:space-between; align-items:center; }
+
+</style>
+</head>
+
+<body>
+
+<!-- SINGLE LOGIN (Passphrase = Login) -->
+<div class="login" id="login">
+  <div class="login-card">
+    <h1>FinSight</h1>
+    <p>Enter your passphrase to unlock your encrypted local data.</p>
+    <input id="passphrase" type="password" placeholder="Enter passphrase"/>
+    <div style="height:16px;"></div>
+    <button class="primary" style="width:100%" onclick="enterApp()">Unlock</button>
+  </div>
+</div>
+
+<!-- APP -->
+<div class="app" id="app">
+
+  <div class="sidebar">
+    <button class="nav-btn active" onclick="show('dashboard',this)">🏠</button>
+    <button class="nav-btn" onclick="show('import',this)">⬆️</button>
+    <button class="nav-btn" onclick="show('ai',this)">✨</button>
+    <button class="nav-btn" onclick="show('receipt',this)">🧾</button>
+    <button class="nav-btn" onclick="show('alerts',this)">⚠️</button>
+    <button class="nav-btn" onclick="show('settings',this)">⚙️</button>
+  </div>
+
+  <div class="main">
+
+    <!-- DASHBOARD -->
+    <div id="dashboard" class="section active">
+      <h2>Dashboard</h2>
+
+      <div class="card">
+        <div class="flex">
+          <div>
+            <div class="muted">Total Spent (This Month)</div>
+            <h3 id="total">$0.00</h3>
+          </div>
+          <button onclick="seedData()">Seed Demo</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="muted">AI Insight</div>
+        <div id="aiInsight">Import CSV or scan receipt to generate insights.</div>
+      </div>
+    </div>
+
+    <!-- IMPORT -->
+    <div id="import" class="section">
+      <h2>Import CSV</h2>
+
+      <div class="card">
+        <p class="muted">Upload a bank statement CSV (simulated).</p>
+        <button onclick="simulateImport()">Generate Preview</button>
+        <div id="importResult" style="margin-top:16px;"></div>
+      </div>
+    </div>
+
+    <!-- AI -->
+    <div id="ai" class="section">
+      <h2>AI Insights</h2>
+
+      <div class="card">
+        <div id="aiPrediction">No data yet.</div>
+      </div>
+    </div>
+
+    <!-- RECEIPT -->
+    <div id="receipt" class="section">
+      <h2>Scan Receipt</h2>
+
+      <div class="card">
+        <p class="muted">Simulate OCR → confirm entry.</p>
+        <button onclick="simulateOCR()">Simulate OCR</button>
+        <div id="receiptConfirm" style="margin-top:16px;"></div>
+      </div>
+    </div>
+
+    <!-- ALERTS -->
+    <div id="alerts" class="section">
+      <h2>Anomaly Alerts</h2>
+
+      <div class="card">
+        <div id="alertContent">No alerts.</div>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div id="settings" class="section">
+      <h2>Privacy & Architecture</h2>
+
+      <div class="card">
+        <p class="muted">
+          ✔ CSV-only imports<br>
+          ✔ Local encrypted storage (simulated)<br>
+          ✔ AI predictions & suggestions<br>
+          ✔ Receipt scan with confirmation<br><br>
+          ✖ No bank APIs<br>
+          ✖ No external account login<br>
+          ✖ No cloud storage
+        </p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+let state = { spent:0 };
+
+function enterApp(){
+  document.getElementById("login").style.display="none";
+  document.getElementById("app").style.display="flex";
+}
+
+function show(id,btn){
+  document.querySelectorAll(".section").forEach(s=>s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+
+  document.querySelectorAll(".nav-btn").forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+}
+
+function seedData(){
+  state.spent=1450.32;
+  document.getElementById("total").innerText="$"+state.spent.toFixed(2);
+  document.getElementById("aiInsight").innerText=
+    "You are trending 12% above your Dining Out budget. Consider reducing discretionary spending next month.";
+}
+
+function simulateImport(){
+  document.getElementById("importResult").innerHTML=
+    "<span class='tag good'>5 new transactions imported</span>";
+  state.spent+=320;
+  document.getElementById("total").innerText="$"+state.spent.toFixed(2);
+}
+
+function simulateOCR(){
+  document.getElementById("receiptConfirm").innerHTML=
+    "Coffee Shop – $7.85 <button onclick='confirmReceipt()'>Confirm</button>";
+}
+
+function confirmReceipt(){
+  state.spent+=7.85;
+  document.getElementById("total").innerText="$"+state.spent.toFixed(2);
+  document.getElementById("receiptConfirm").innerHTML=
+    "<span class='tag good'>Receipt added</span>";
+  document.getElementById("alertContent").innerHTML=
+    "<span class='tag warn'>Unusual merchant detected</span>";
+}
+</script>
+
+</body>
+</html>
