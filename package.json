@@ -7,7 +7,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "start:windows": "npx react-native start --config metro.config.windows.js --port 8081",
-    "windows": "npx react-native run-windows --metro-config metro.config.windows.js",
+    "dev:windows": "powershell -NoProfile -Command \"Start-Process powershell -ArgumentList '-NoExit','-Command','Set-Location ''$PWD''; npm run start:windows'; npm run windows\"",
+    "windows": "npx react-native run-windows --no-packager",
     "test:windows": "jest --config jest.config.windows.js"
   },
   "dependencies": {

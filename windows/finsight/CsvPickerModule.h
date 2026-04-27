@@ -17,6 +17,12 @@ struct CsvPickerModule {
   REACT_METHOD(setDropEnabled);
   void setDropEnabled(bool enabled) noexcept;
 
+  REACT_METHOD(addListener);
+  void addListener(std::wstring const &eventName) noexcept;
+
+  REACT_METHOD(removeListeners);
+  void removeListeners(double count) noexcept;
+
   REACT_EVENT(OnCsvDrop, L"WindowsCsvPickerDrop");
   std::function<void(winrt::Microsoft::ReactNative::JSValue const &)> OnCsvDrop;
 

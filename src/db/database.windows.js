@@ -4,15 +4,15 @@ import { readJsonFile, writeJsonFile } from '../platform/windowsStorage';
 const DB_FILENAME = 'finsight-db.json';
 
 const DEFAULT_CATEGORIES = [
-  { id: 'cat_food', name: 'Food & Dining', icon: 'Food', color: '#f97316', keywords: ['restaurant', 'cafe', 'mcdonald', 'starbucks', 'pizza', 'sushi', 'burger', 'taco', 'diner', 'doordash', 'ubereats', 'food'] },
-  { id: 'cat_transport', name: 'Transportation', icon: 'Transport', color: '#3b82f6', keywords: ['uber', 'lyft', 'gas', 'shell', 'chevron', 'parking', 'transit', 'metro', 'bus', 'train', 'airline', 'delta', 'united'] },
-  { id: 'cat_shopping', name: 'Shopping', icon: 'Shop', color: '#a855f7', keywords: ['amazon', 'target', 'walmart', 'costco', 'nordstrom', 'macy', 'ebay', 'shop', 'store', 'mall'] },
-  { id: 'cat_health', name: 'Health & Medical', icon: 'Health', color: '#10b981', keywords: ['pharmacy', 'cvs', 'walgreen', 'doctor', 'hospital', 'clinic', 'dental', 'medical'] },
-  { id: 'cat_entertainment', name: 'Entertainment', icon: 'Fun', color: '#ec4899', keywords: ['netflix', 'spotify', 'hulu', 'disney', 'cinema', 'theater', 'concert', 'game', 'steam', 'playstation'] },
-  { id: 'cat_utilities', name: 'Utilities & Bills', icon: 'Bills', color: '#f59e0b', keywords: ['electric', 'water', 'internet', 'phone', 'verizon', 'att', 'comcast', 'bill', 'utility'] },
-  { id: 'cat_rent', name: 'Housing & Rent', icon: 'Home', color: '#6366f1', keywords: ['rent', 'mortgage', 'hoa', 'lease', 'property'] },
-  { id: 'cat_income', name: 'Income', icon: 'Income', color: '#22c55e', keywords: ['payroll', 'salary', 'deposit', 'paycheck', 'direct deposit'] },
-  { id: 'cat_other', name: 'Other', icon: 'Other', color: '#94a3b8', keywords: [] },
+  { id: 'cat_food', name: 'Food & Dining', icon: '🍽️', color: '#f97316', keywords: ['restaurant', 'cafe', 'mcdonald', 'starbucks', 'pizza', 'sushi', 'burger', 'taco', 'diner', 'doordash', 'ubereats', 'food'] },
+  { id: 'cat_transport', name: 'Transportation', icon: '🚗', color: '#3b82f6', keywords: ['uber', 'lyft', 'gas', 'shell', 'chevron', 'parking', 'transit', 'metro', 'bus', 'train', 'airline', 'delta', 'united'] },
+  { id: 'cat_shopping', name: 'Shopping', icon: '🛍️', color: '#a855f7', keywords: ['amazon', 'target', 'walmart', 'costco', 'nordstrom', 'macy', 'ebay', 'shop', 'store', 'mall'] },
+  { id: 'cat_health', name: 'Health & Medical', icon: '💊', color: '#10b981', keywords: ['pharmacy', 'cvs', 'walgreen', 'doctor', 'hospital', 'clinic', 'dental', 'medical'] },
+  { id: 'cat_entertainment', name: 'Entertainment', icon: '🎬', color: '#ec4899', keywords: ['netflix', 'spotify', 'hulu', 'disney', 'cinema', 'theater', 'concert', 'game', 'steam', 'playstation'] },
+  { id: 'cat_utilities', name: 'Utilities & Bills', icon: '💡', color: '#f59e0b', keywords: ['electric', 'water', 'internet', 'phone', 'verizon', 'att', 'comcast', 'bill', 'utility'] },
+  { id: 'cat_rent', name: 'Housing & Rent', icon: '🏠', color: '#6366f1', keywords: ['rent', 'mortgage', 'hoa', 'lease', 'property'] },
+  { id: 'cat_income', name: 'Income', icon: '💰', color: '#22c55e', keywords: ['payroll', 'salary', 'deposit', 'paycheck', 'direct deposit'] },
+  { id: 'cat_other', name: 'Other', icon: '📦', color: '#94a3b8', keywords: [] },
 ];
 
 const runtime = globalThis.__finsightWindowsDbRuntime || (globalThis.__finsightWindowsDbRuntime = {
@@ -52,6 +52,22 @@ function normalizeState(rawState) {
 
   if (nextState.categories.length === 0) {
     nextState.categories = buildDefaultCategories();
+  } else {
+    const defaultsById = new Map(buildDefaultCategories().map((category) => [category.id, category]));
+    nextState.categories = nextState.categories.map((category) => {
+      const systemDefault = defaultsById.get(category.id);
+      if (!systemDefault || Number(category.is_system) !== 1) {
+        return category;
+      }
+
+      return {
+        ...category,
+        name: systemDefault.name,
+        icon: systemDefault.icon,
+        color: systemDefault.color,
+        keywords: systemDefault.keywords,
+      };
+    });
   }
 
   return nextState;
@@ -72,6 +88,7 @@ function queuePersist() {
 
 async function ensureState() {
   if (runtime.loaded && runtime.state) {
+    runtime.state = normalizeState(runtime.state);
     return runtime.state;
   }
 

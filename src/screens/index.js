@@ -21,6 +21,18 @@ import { emitDataChanged, subscribeToDataChanges } from '../db/changeEvents';
 import { addCsvDropListener, pickCsvTextAsync, setCsvDropEnabled } from '../platform/csvImport';
 import { getItemAsync, setItemAsync } from '../platform/secureStore';
 
+function isTextIcon(icon) {
+  return /^[A-Za-z][A-Za-z0-9\s&/-]*$/.test(String(icon || '').trim());
+}
+
+function getCategoryLabel(category) {
+  if (!category) return '';
+  const name = String(category.name || '').trim();
+  const icon = String(category.icon || '').trim();
+  if (!icon || isTextIcon(icon)) return name;
+  return `${icon} ${name}`;
+}
+
 // ─────────────────────────────────────────────
 // Auth Screen
 // ─────────────────────────────────────────────
@@ -174,7 +186,7 @@ export function DashboardScreen({ profile, navigation }) {
             return (
               <View key={b.id} style={{ marginBottom: 14 }}>
                 <View style={styles.budgetRow}>
-                  <Text style={styles.budgetName}>{cat?.icon} {cat?.name}</Text>
+                  <Text style={styles.budgetName}>{getCategoryLabel(cat) || b.category_id}</Text>
                   <Text style={styles.budgetAmt}>${b.spent.toFixed(0)} / ${b.limit_amount}</Text>
                 </View>
                 <ProgressBar value={b.spent} max={b.limit_amount} color={cat?.color || colors.accent} />
@@ -551,24 +563,46 @@ export function BudgetManagerScreen({ profile }) {
   const [categories, setCategories] = useState([]);
   const [showAdd,    setShowAdd]    = useState(false);
   const [form,       setForm]       = useState({ category_id: '', limit: '' });
+  const [saving,     setSaving]     = useState(false);
   const now   = new Date();
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const year  = String(now.getFullYear());
 
-  const load = async () => {
+  const load = useCallback(async () => {
     const [bs, cats] = await Promise.all([
       BudgetingGoalService.getBudgetProgress(profile.id, `${year}-${month}`),
       FinancialDataService.getAllCategories(),
     ]);
     setBudgets(bs); setCategories(cats.filter(c => c.id !== 'cat_income'));
-  };
+  }, [profile.id, year, month]);
 
-  useEffect(() => { load(); }, []);
-  useEffect(() => subscribeToDataChanges(load), [profile.id, month, year]);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => subscribeToDataChanges(load), [load]);
 
   const handleSave = async () => {
-    await BudgetingGoalService.setBudget(profile.id, form.category_id, month, year, parseFloat(form.limit));
-    setShowAdd(false); setForm({ category_id: '', limit: '' }); load();
+    const parsedLimit = parseFloat(form.limit);
+    if (!form.category_id) {
+      Alert.alert('Missing Category', 'Please choose a category for this budget.');
+      return;
+    }
+    if (!form.limit.trim() || Number.isNaN(parsedLimit) || parsedLimit <= 0) {
+      Alert.alert('Invalid Limit', 'Please enter a monthly budget greater than 0.');
+      return;
+    }
+
+    setSaving(true);
+    setShowAdd(false);
+    setForm({ category_id: '', limit: '' });
+
+    try {
+      await BudgetingGoalService.setBudget(profile.id, form.category_id, month, year, parsedLimit);
+      await load();
+    } catch (error) {
+      console.warn('Failed to save budget:', error);
+      Alert.alert('Unable to Save Budget', 'Something went wrong while saving this budget.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDelete = (id) => {
@@ -627,11 +661,11 @@ export function BudgetManagerScreen({ profile }) {
       <BottomSheet
         visible={showAdd}
         title="Set Budget"
-        onClose={() => setShowAdd(false)}
+        onClose={() => { if (!saving) setShowAdd(false); }}
         footer={
           <View style={{ flexDirection: 'column', gap: 10 }}>
-            <Btn onPress={handleSave} disabled={!form.category_id || !form.limit} fullWidth>Save Budget</Btn>
-            <Btn variant="ghost" onPress={() => setShowAdd(false)} fullWidth>Cancel</Btn>
+            <Btn onPress={handleSave} disabled={saving || !form.category_id || !form.limit} fullWidth>{saving ? 'Saving...' : 'Save Budget'}</Btn>
+            <Btn variant="ghost" onPress={() => setShowAdd(false)} disabled={saving} fullWidth>Cancel</Btn>
           </View>
         }
       >

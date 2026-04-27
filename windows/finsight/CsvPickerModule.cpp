@@ -202,4 +202,12 @@ void CsvPickerModule::setDropEnabled(bool enabled) noexcept {
   });
 }
 
+void CsvPickerModule::addListener(std::wstring const &eventName) noexcept {
+  (void)eventName;
+}
+
+void CsvPickerModule::removeListeners(double count) noexcept {
+  (void)count;
+}
+
 } // namespace winrt::finsight

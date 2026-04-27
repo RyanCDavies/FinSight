@@ -31,3 +31,4 @@ ios/build/
 
 # misc
 *.log
+.fake
