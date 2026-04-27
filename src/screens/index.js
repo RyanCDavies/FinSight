@@ -387,12 +387,27 @@ export function TransactionsScreen({ profile }) {
             style={styles.searchInput}
           />
         </View>
-        <Btn size="sm" onPress={() => setShowImport(true)}>📁</Btn>
-        <Btn size="sm" onPress={() => { setShowAdd(true); setEditTx(null); }}>+</Btn>
+        <View style={styles.toolbarSection}>
+          <Text style={styles.toolbarSectionTitle}>Import & Add</Text>
+        </View>
+        <View style={styles.toolbarActions}>
+          <View style={styles.toolbarActionButton}>
+            <Btn size="sm" onPress={() => setShowImport(true)} fullWidth>Import CSV</Btn>
+          </View>
+          <View style={styles.toolbarActionButton}>
+            <Btn size="sm" variant="outline" onPress={() => Alert.alert('OCR Import Coming Soon', 'Receipt and statement OCR import will be added in a future update.')} fullWidth>Scan Receipt</Btn>
+          </View>
+          <View style={styles.toolbarActionButton}>
+            <Btn size="sm" onPress={() => { setShowAdd(true); setEditTx(null); }} fullWidth>Add Transaction</Btn>
+          </View>
+        </View>
       </View>
 
       {/* Category filter pills */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
+      <View style={styles.filterSection}>
+        <Text style={styles.toolbarSectionTitle}>Filter History</Text>
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={Platform.OS !== 'windows'} style={styles.filterRow} contentContainerStyle={styles.filterRowContent}>
         <TouchableOpacity onPress={() => setFilterCat('')} style={[styles.filterPill, !filterCat && styles.filterPillActive]}>
           <Text style={[styles.filterPillText, !filterCat && { color: '#fff' }]}>All</Text>
         </TouchableOpacity>
@@ -435,7 +450,7 @@ export function TransactionsScreen({ profile }) {
         <Input label="Merchant" value={form.merchant} onChangeText={v => setForm(f => ({ ...f, merchant: v }))} placeholder="e.g. Starbucks" />
         <Input label="Amount (negative = expense)" value={form.amount} onChangeText={v => setForm(f => ({ ...f, amount: v }))} placeholder="-12.50" keyboardType="numeric" />
         <Text style={styles.inputLabel}>Category</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }} contentContainerStyle={{ gap: 8 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={Platform.OS !== 'windows'} style={styles.sheetChipScroll} contentContainerStyle={styles.sheetChipScrollContent}>
           {categories.map(c => (
             <TouchableOpacity key={c.id} onPress={() => setForm(f => ({ ...f, category_id: c.id }))} style={[styles.filterPill, form.category_id === c.id && { backgroundColor: c.color }]}>
               <Text style={[styles.filterPillText, form.category_id === c.id && { color: '#fff' }]}>{c.icon} {c.name}</Text>
@@ -670,7 +685,7 @@ export function BudgetManagerScreen({ profile }) {
         }
       >
         <Text style={styles.inputLabel}>Category</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }} contentContainerStyle={{ gap: 8 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={Platform.OS !== 'windows'} style={styles.sheetChipScroll} contentContainerStyle={styles.sheetChipScrollContent}>
           {categories.map(c => (
             <TouchableOpacity key={c.id} onPress={() => setForm(f => ({ ...f, category_id: c.id }))} style={[styles.filterPill, form.category_id === c.id && { backgroundColor: c.color }]}>
               <Text style={[styles.filterPillText, form.category_id === c.id && { color: '#fff' }]}>{c.icon} {c.name}</Text>
@@ -903,14 +918,23 @@ const styles = StyleSheet.create({
   screenContent:     { padding: spacing.lg, paddingBottom: 20 },
   screenHeaderRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, paddingTop: 8 },
   screenTitle:       { fontSize: font.sizes.xxl, fontWeight: font.weights.bold, color: colors.text },
-  toolbar:           { flexDirection: 'row', gap: 8, padding: 16, paddingBottom: 8, alignItems: 'center' },
-  searchBox:         { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: 10 },
+  toolbar:           { gap: 12, padding: 16, paddingBottom: 8 },
+  toolbarSection:    { gap: 4 },
+  toolbarSectionTitle: { fontSize: font.sizes.sm, fontWeight: font.weights.semibold, color: colors.text },
+  toolbarSectionText: { fontSize: font.sizes.xs, color: colors.textMuted, lineHeight: 18 },
+  toolbarActions:    { flexDirection: 'row', gap: 8 },
+  toolbarActionButton: { flex: 1 },
+  searchBox:         { width: '100%', flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: 10 },
   searchIcon:        { fontSize: 14, marginRight: 6 },
   searchInput:       { flex: 1, color: colors.text, fontSize: font.sizes.md, paddingVertical: 10 },
+  filterSection:     { paddingHorizontal: 16, marginBottom: 8, gap: 4 },
   filterRow:         { maxHeight: 48, marginBottom: 4 },
-  filterPill:        { backgroundColor: colors.surfaceAlt, borderRadius: radius.full, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1, borderColor: colors.border },
+  filterRowContent:  { paddingHorizontal: 16, gap: 8, paddingBottom: Platform.OS === 'windows' ? 12 : 0, paddingRight: Platform.OS === 'windows' ? 12 : 0 },
+  sheetChipScroll:   { marginBottom: 16 },
+  sheetChipScrollContent: { gap: 8, paddingBottom: Platform.OS === 'windows' ? 12 : 0, paddingRight: Platform.OS === 'windows' ? 12 : 0 },
+  filterPill:        { backgroundColor: colors.surfaceAlt, borderRadius: radius.full, paddingHorizontal: 12, minHeight: 34, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   filterPillActive:  { backgroundColor: colors.accent, borderColor: colors.accent },
-  filterPillText:    { color: colors.textSecondary, fontSize: font.sizes.xs, fontWeight: font.weights.semibold },
+  filterPillText:    { color: colors.textSecondary, fontSize: font.sizes.xs, fontWeight: font.weights.semibold, textAlignVertical: 'center', includeFontPadding: false },
   inputLabel:        { fontSize: font.sizes.xs, color: colors.textMuted, fontWeight: font.weights.semibold, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
   input:             { backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingVertical: 12, paddingHorizontal: 14, color: colors.text, fontSize: font.sizes.md, marginBottom: 16 },
   txRow:             { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },

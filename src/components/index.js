@@ -146,7 +146,11 @@ export function BottomSheet({ visible, title, onClose, children, footer }) {
             <Text style={{ color: colors.textMuted, fontSize: 20 }}>✕</Text>
           </TouchableOpacity>
         </View>
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
+        <ScrollView
+          showsVerticalScrollIndicator={!isWindows}
+          style={isWindows && styles.windowsSheetScroll}
+          contentContainerStyle={[styles.sheetContent, isWindows && styles.windowsSheetContent]}
+        >
           {children}
         </ScrollView>
         {footer && (
@@ -314,6 +318,15 @@ const styles = StyleSheet.create({
     fontSize:   font.sizes.xl,
     fontWeight: font.weights.bold,
     color:      colors.text,
+  },
+  sheetContent: {
+    paddingBottom: 8,
+  },
+  windowsSheetScroll: {
+    paddingRight: 12,
+  },
+  windowsSheetContent: {
+    paddingBottom: 20,
   },
   sheetFooter: {
     paddingTop:   12,
