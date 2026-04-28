@@ -13,13 +13,11 @@ import { colors, radius, spacing, font } from '../theme';
 import { Card, Btn, Input, Badge, ProgressBar, ScreenLoader, SectionHeader, BottomSheet, CategoryPill } from '../components';
 import {
   AuthSecurityService, FinancialDataService, ImportIntegrationService,
-  BudgetingGoalService, ReportingAnalyticsService, seedDemoData,
+  BudgetingGoalService, LocalAIService, ReportingAnalyticsService, seedDemoData,
 } from '../services';
-import { AgenticAssistant } from '../engines';
 import { saveSession, clearSession, getDB } from '../db/database';
 import { emitDataChanged, subscribeToDataChanges } from '../db/changeEvents';
 import { addCsvDropListener, pickCsvTextAsync, setCsvDropEnabled } from '../platform/csvImport';
-import { getItemAsync, setItemAsync } from '../platform/secureStore';
 
 function isTextIcon(icon) {
   return /^[A-Za-z][A-Za-z0-9\s&/-]*$/.test(String(icon || '').trim());
@@ -31,6 +29,29 @@ function getCategoryLabel(category) {
   const icon = String(category.icon || '').trim();
   if (!icon || isTextIcon(icon)) return name;
   return `${icon} ${name}`;
+}
+
+function formatModelSize(sizeBytes) {
+  if (!sizeBytes) return 'Unknown size';
+  return `${Math.round(sizeBytes / (1024 * 1024))} MB`;
+}
+
+function buildAssistantContext(data) {
+  return {
+    summary: `Spent: $${data.totalSpend.toFixed(2)}, Income: $${data.totalIncome.toFixed(2)}`,
+    totalSpend: data.totalSpend,
+    totalIncome: data.totalIncome,
+    spendByCategory: Object.fromEntries(
+      Object.entries(data.spendByCategory).map(([key, value]) => [data.cats.find(c => c.id === key)?.name || key, value])
+    ),
+    budgets: data.budgets.map((budget) => ({
+      category: data.cats.find(c => c.id === budget.category_id)?.name,
+      limit: budget.limit_amount,
+      spent: budget.spent,
+    })),
+    anomalies: data.anomalies.map((anomaly) => anomaly.description),
+    subscriptions: data.subscriptions,
+  };
 }
 
 // ─────────────────────────────────────────────
@@ -281,6 +302,7 @@ export function TransactionsScreen({ profile }) {
   const [filterCat,    setFilterCat]    = useState('');
   const [showAdd,      setShowAdd]      = useState(false);
   const [showImport,   setShowImport]   = useState(false);
+  const [showOcrImport, setShowOcrImport] = useState(false);
   const [editTx,       setEditTx]       = useState(null);
   const [form,         setForm]         = useState({ date: new Date().toISOString().slice(0, 10), merchant: '', amount: '', category_id: '', note: '' });
 
@@ -395,7 +417,7 @@ export function TransactionsScreen({ profile }) {
             <Btn size="sm" onPress={() => setShowImport(true)} fullWidth>Import CSV</Btn>
           </View>
           <View style={styles.toolbarActionButton}>
-            <Btn size="sm" variant="outline" onPress={() => Alert.alert('OCR Import Coming Soon', 'Receipt and statement OCR import will be added in a future update.')} fullWidth>Scan Receipt</Btn>
+            <Btn size="sm" variant="outline" onPress={() => setShowOcrImport(true)} fullWidth>Scan Receipt</Btn>
           </View>
           <View style={styles.toolbarActionButton}>
             <Btn size="sm" onPress={() => { setShowAdd(true); setEditTx(null); }} fullWidth>Add Transaction</Btn>
@@ -462,6 +484,7 @@ export function TransactionsScreen({ profile }) {
 
       {/* CSV Import Sheet */}
       {showImport && <CSVImportSheet profile={profile} onClose={() => { setShowImport(false); load(); }} />}
+      {showOcrImport && <OCRImportSheet profile={profile} onClose={() => { setShowOcrImport(false); load(); }} />}
     </View>
   );
 }
@@ -471,7 +494,7 @@ export function TransactionsScreen({ profile }) {
 function CSVImportSheet({ profile, onClose }) {
   const [step,    setStep]    = useState('upload');
   const [csvData, setCsvData] = useState(null);
-  const [mapping, setMapping] = useState({ date: '', merchant: '', amount: '', note: '' });
+  const [mapping, setMapping] = useState({ date: '', merchant: '', amount: '', note: '', category: '' });
   const [result,  setResult]  = useState(null);
 
   const loadCsvText = (text) => {
@@ -490,6 +513,7 @@ function CSVImportSheet({ profile, onClose }) {
       merchant: matchHeader('merchant', 'description', 'payee') || headers[1] || '',
       amount:   matchHeader('amount', 'debit', 'credit') || headers[2] || '',
       note:     matchHeader('note', 'memo') || '',
+      category: matchHeader('category', 'type') || '',
     });
     setStep('map');
   };
@@ -537,7 +561,7 @@ function CSVImportSheet({ profile, onClose }) {
       {step === 'map' && csvData && (
         <View>
           <Text style={styles.mapHint}>{csvData.rows.length} rows detected — map your columns:</Text>
-          {['date', 'merchant', 'amount', 'note'].map(field => (
+          {['date', 'merchant', 'amount', 'note', 'category'].map(field => (
             <View key={field} style={{ marginBottom: 12 }}>
               <Text style={styles.inputLabel}>{field.toUpperCase()}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
@@ -553,6 +577,7 @@ function CSVImportSheet({ profile, onClose }) {
             </View>
           ))}
           <Btn onPress={handleImport} fullWidth style={{ marginTop: 8 }}>Import Transactions</Btn>
+          <Text style={styles.importHint}>If no category is mapped, FinSight will infer one from merchant, memo, and amount patterns.</Text>
         </View>
       )}
 
@@ -562,6 +587,80 @@ function CSVImportSheet({ profile, onClose }) {
           <Text style={styles.doneTitle}>Import Complete</Text>
           <Text style={{ color: colors.success, marginTop: 8 }}>{result.imported} transactions imported</Text>
           {result.duplicates > 0 && <Text style={{ color: colors.textMuted, fontSize: font.sizes.sm, marginTop: 4 }}>{result.duplicates} duplicates skipped</Text>}
+          {result.autoCategorized > 0 && <Text style={{ color: colors.textMuted, fontSize: font.sizes.sm, marginTop: 4 }}>{result.autoCategorized} transactions auto-categorized</Text>}
+          {result.uncategorized > 0 && <Text style={{ color: colors.warning, fontSize: font.sizes.sm, marginTop: 4 }}>{result.uncategorized} transactions left in Other for review</Text>}
+          <Btn onPress={onClose} style={{ marginTop: 20 }} fullWidth>Done</Btn>
+        </View>
+      )}
+    </BottomSheet>
+  );
+}
+
+function OCRImportSheet({ profile, onClose }) {
+  const [ocrText, setOcrText] = useState('');
+  const [previewRows, setPreviewRows] = useState([]);
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const analyze = () => {
+    const parsed = ImportIntegrationService.parseOCRText(ocrText);
+    if (parsed.error) {
+      Alert.alert('OCR text not recognized', parsed.error);
+      return;
+    }
+    setPreviewRows(parsed.rows);
+  };
+
+  const importRows = async () => {
+    if (!previewRows.length || loading) return;
+    setLoading(true);
+    try {
+      const nextResult = await ImportIntegrationService.importTransactions(profile.id, previewRows, 'ocr');
+      setResult(nextResult);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <BottomSheet visible title="Import OCR Text" onClose={onClose}>
+      {!result && (
+        <View>
+          <Text style={styles.mapHint}>Paste OCR output from a scanned receipt or bank statement. Each transaction line should include a date and amount.</Text>
+          <TextInput
+            value={ocrText}
+            onChangeText={setOcrText}
+            multiline
+            placeholder={'04/20/2026 STARBUCKS 6.75\n04/21/2026 PAYROLL DEPOSIT 1200.00'}
+            placeholderTextColor={colors.textMuted}
+            style={styles.ocrInput}
+          />
+          <Btn onPress={analyze} fullWidth>Analyze OCR Text</Btn>
+
+          {previewRows.length > 0 && (
+            <View style={{ marginTop: 16, gap: 10 }}>
+              <Text style={styles.toolbarSectionTitle}>{previewRows.length} transactions detected</Text>
+              {previewRows.slice(0, 5).map((row, index) => (
+                <View key={`${row.date}-${row.merchant}-${index}`} style={styles.ocrPreviewCard}>
+                  <Text style={styles.txMerchant}>{row.merchant}</Text>
+                  <Text style={styles.txMeta}>{row.date} · ${Math.abs(row.amount).toFixed(2)}</Text>
+                </View>
+              ))}
+              {previewRows.length > 5 && <Text style={styles.importHint}>Only the first 5 rows are previewed here. All detected rows will be imported.</Text>}
+              <Btn onPress={importRows} fullWidth disabled={loading}>{loading ? 'Importing...' : 'Import OCR Transactions'}</Btn>
+            </View>
+          )}
+        </View>
+      )}
+
+      {!!result && (
+        <View style={styles.doneState}>
+          <Text style={{ fontSize: 48 }}>âœ…</Text>
+          <Text style={styles.doneTitle}>OCR Import Complete</Text>
+          <Text style={{ color: colors.success, marginTop: 8 }}>{result.imported} transactions imported</Text>
+          {result.duplicates > 0 && <Text style={{ color: colors.textMuted, fontSize: font.sizes.sm, marginTop: 4 }}>{result.duplicates} duplicates skipped</Text>}
+          {result.autoCategorized > 0 && <Text style={{ color: colors.textMuted, fontSize: font.sizes.sm, marginTop: 4 }}>{result.autoCategorized} transactions auto-categorized</Text>}
+          {result.uncategorized > 0 && <Text style={{ color: colors.warning, fontSize: font.sizes.sm, marginTop: 4 }}>{result.uncategorized} transactions left in Other for review</Text>}
           <Btn onPress={onClose} style={{ marginTop: 20 }} fullWidth>Done</Btn>
         </View>
       )}
@@ -703,52 +802,56 @@ export function BudgetManagerScreen({ profile }) {
 // ─────────────────────────────────────────────
 
 export function AssistantScreen({ profile }) {
-  const [messages, setMessages] = useState([{ role: 'assistant', text: "Hi! I'm your FinSight AI 🤖 Ask me anything about your spending, budgets, or how to save money." }]);
+  const [messages, setMessages] = useState([{ role: 'assistant', text: "Hi! I'm your FinSight on-device assistant. Ask about spending, budgets, imports, or savings ideas once the local model package is installed." }]);
   const [input,    setInput]    = useState('');
   const [loading,  setLoading]  = useState(false);
   const [context,  setContext]  = useState({});
-  const [apiKey,   setApiKey]   = useState('');
-  const [showKey,  setShowKey]  = useState(false);
+  const [assistantStatus, setAssistantStatus] = useState({ state: 'not-installed', ready: false, detail: 'Checking local AI package...' });
+  const [installing, setInstalling] = useState(false);
+  const [installProgress, setInstallProgress] = useState(null);
   const scrollRef = useRef();
 
-  useEffect(() => {
-    ReportingAnalyticsService.getDashboardData(profile.id).then(d => {
-      setContext({
-        summary:         `Spent: $${d.totalSpend.toFixed(2)}, Income: $${d.totalIncome.toFixed(2)}`,
-        totalSpend:      d.totalSpend,
-        totalIncome:     d.totalIncome,
-        spendByCategory: Object.fromEntries(Object.entries(d.spendByCategory).map(([k, v]) => [d.cats.find(c => c.id === k)?.name || k, v])),
-        budgets:         d.budgets.map(b => ({ category: d.cats.find(c => c.id === b.category_id)?.name, limit: b.limit_amount, spent: b.spent })),
-        anomalies:       d.anomalies.map(a => a.description),
-        subscriptions:   d.subscriptions,
-      });
+  const refreshAssistantStatus = useCallback(() => {
+    LocalAIService.getStatus().then(setAssistantStatus).catch((error) => {
+      console.warn('Failed to refresh local AI status:', error);
+      setAssistantStatus({ state: 'error', ready: false, detail: 'Unable to read local AI package status.' });
     });
+  }, []);
 
-    // Load saved API key
-    getItemAsync('anthropic_api_key').then(k => { if (k) setApiKey(k); else setShowKey(true); });
-  }, [profile.id]);
+  useEffect(() => {
+    ReportingAnalyticsService.getDashboardData(profile.id).then(d => setContext(buildAssistantContext(d)));
+    refreshAssistantStatus();
+  }, [profile.id, refreshAssistantStatus]);
+
+  useFocusEffect(useCallback(() => {
+    refreshAssistantStatus();
+  }, [refreshAssistantStatus]));
 
   useEffect(() => {
     const reloadContext = () => {
-      ReportingAnalyticsService.getDashboardData(profile.id).then(d => {
-        setContext({
-          summary:         `Spent: $${d.totalSpend.toFixed(2)}, Income: $${d.totalIncome.toFixed(2)}`,
-          totalSpend:      d.totalSpend,
-          totalIncome:     d.totalIncome,
-          spendByCategory: Object.fromEntries(Object.entries(d.spendByCategory).map(([k, v]) => [d.cats.find(c => c.id === k)?.name || k, v])),
-          budgets:         d.budgets.map(b => ({ category: d.cats.find(c => c.id === b.category_id)?.name, limit: b.limit_amount, spent: b.spent })),
-          anomalies:       d.anomalies.map(a => a.description),
-          subscriptions:   d.subscriptions,
-        });
-      });
+      ReportingAnalyticsService.getDashboardData(profile.id).then(d => setContext(buildAssistantContext(d)));
     };
 
     return subscribeToDataChanges(reloadContext);
   }, [profile.id]);
 
-  const saveApiKey = async (key) => {
-    await setItemAsync('anthropic_api_key', key);
-    setApiKey(key); setShowKey(false);
+  const installModel = async () => {
+    setInstalling(true);
+    setInstallProgress({ progress: 0, detail: 'Preparing local AI package...' });
+
+    try {
+      await LocalAIService.installRecommendedModel((progressUpdate) => {
+        setInstallProgress(progressUpdate);
+      });
+      refreshAssistantStatus();
+      setMessages([{ role: 'assistant', text: "Your local AI package is installed. Native mobile inference is the next integration step, so responses still use the current scaffolded assistant flow for now." }]);
+    } catch (error) {
+      console.warn('Failed to install local AI model:', error);
+      Alert.alert('Install Failed', error.message || 'Unable to install the local AI package.');
+      refreshAssistantStatus();
+    } finally {
+      setInstalling(false);
+    }
   };
 
   const send = async () => {
@@ -759,35 +862,37 @@ export function AssistantScreen({ profile }) {
     setLoading(true);
     setMessages(m => [...m, { role: 'assistant', text: '...' }]);
 
-    await AgenticAssistant.chat(userMsg, context, apiKey, (partial) => {
+    await LocalAIService.ask(userMsg, context, (partial) => {
       setMessages(m => m.map((msg, i) => i === m.length - 1 ? { ...msg, text: partial } : msg));
     });
     setLoading(false);
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
   };
 
-  const suggestions = ['How much did I spend on food?', 'Am I on track with my budgets?', 'Where can I save money?'];
+  const suggestions = ['How much did I spend on food?', 'Which budget needs attention?', 'Did imports get categorized correctly?'];
 
   return (
     <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      {/* API Key setup */}
-      {showKey && (
-        <View style={styles.apiKeyBanner}>
-          <Text style={styles.apiKeyText}>Enter Anthropic API key to enable AI chat</Text>
-          <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-            <TextInput
-              value={apiKey} onChangeText={setApiKey}
-              placeholder="sk-ant-..." placeholderTextColor={colors.textMuted}
-              secureTextEntry style={[styles.input, { flex: 1, marginBottom: 0 }]}
-            />
-            <Btn size="sm" onPress={() => saveApiKey(apiKey)}>Save</Btn>
+      <View style={[styles.apiKeyBanner, assistantStatus.ready ? styles.assistantReadyBanner : styles.assistantSetupBanner]}>
+        <Text style={styles.apiKeyText}>On-device AI assistant</Text>
+        <Text style={styles.apiKeyNote}>{assistantStatus.detail}</Text>
+        <Text style={styles.importHint}>The app now manages a downloadable local model package separately from the mobile inference runtime, keeping the app install small.</Text>
+        {!assistantStatus.ready && (
+          <View style={styles.assistantActionRow}>
+            <Btn onPress={installModel} disabled={installing} size="sm">
+              {installing ? 'Installing...' : `Install ${formatModelSize(assistantStatus.recommendedModel?.sizeBytes)}`}
+            </Btn>
           </View>
-          <Text style={styles.apiKeyNote}>Key stored securely in device Keychain. Never transmitted.</Text>
-        </View>
-      )}
+        )}
+        {!!installProgress && (
+          <View style={{ marginTop: 12 }}>
+            <ProgressBar value={installProgress.progress || 0} max={1} color={colors.accent} />
+            <Text style={[styles.importHint, { marginTop: 6 }]}>{installProgress.detail}</Text>
+          </View>
+        )}
+      </View>
 
       <ScrollView ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
-        {/* Suggestion chips */}
         {messages.length === 1 && (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
             {suggestions.map((s, i) => (
@@ -807,30 +912,31 @@ export function AssistantScreen({ profile }) {
         ))}
       </ScrollView>
 
-      {/* Input bar */}
       <View style={styles.inputBar}>
         <TextInput
           value={input} onChangeText={setInput}
-          placeholder="Ask about your finances..."
+          placeholder={assistantStatus.ready ? 'Ask your on-device assistant about spending or imports...' : 'Install the local AI package to unlock on-device chat...'}
           placeholderTextColor={colors.textMuted}
           multiline
           style={styles.chatInput}
           onSubmitEditing={send}
+          editable={assistantStatus.ready && !installing}
         />
-        <TouchableOpacity onPress={send} disabled={loading || !input.trim()} style={[styles.sendBtn, (loading || !input.trim()) && { opacity: 0.4 }]}>
-          <Text style={{ color: '#fff', fontWeight: font.weights.bold }}>➤</Text>
+        <TouchableOpacity onPress={send} disabled={loading || !input.trim() || !assistantStatus.ready || installing} style={[styles.sendBtn, (loading || !input.trim() || !assistantStatus.ready || installing) && { opacity: 0.4 }]}>
+          <Text style={{ color: '#fff', fontWeight: font.weights.bold }}>Send</Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
   );
 }
 
-// ─────────────────────────────────────────────
+// ???????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
 // Profile Screen
-// ─────────────────────────────────────────────
-
+// ???????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
 export function ProfileScreen({ profile, onLogout }) {
   const [stats, setStats] = useState({ txCount: 0, budgetCount: 0 });
+  const [aiStatus, setAiStatus] = useState({ state: 'not-installed', ready: false, detail: 'Checking local AI package...' });
+  const [aiBusy, setAiBusy] = useState(false);
 
   useEffect(() => {
     const loadStats = () => {
@@ -846,6 +952,47 @@ export function ProfileScreen({ profile, onLogout }) {
     loadStats();
     return subscribeToDataChanges(loadStats);
   }, [profile.id]);
+
+  useEffect(() => {
+    LocalAIService.getStatus().then(setAiStatus).catch((error) => {
+      console.warn('Failed to load AI status:', error);
+      setAiStatus({ state: 'error', ready: false, detail: 'Unable to load local AI package status.' });
+    });
+  }, []);
+
+  const refreshAiStatus = () => {
+    LocalAIService.getStatus().then(setAiStatus).catch((error) => {
+      console.warn('Failed to refresh AI status:', error);
+    });
+  };
+
+  useFocusEffect(useCallback(() => {
+    refreshAiStatus();
+  }, []));
+
+  const installAi = async () => {
+    setAiBusy(true);
+    try {
+      await LocalAIService.installRecommendedModel();
+      refreshAiStatus();
+    } catch (error) {
+      Alert.alert('Install Failed', error.message || 'Unable to install the local AI package.');
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
+  const removeAi = async () => {
+    setAiBusy(true);
+    try {
+      await LocalAIService.removeInstalledModel();
+      refreshAiStatus();
+    } catch (error) {
+      Alert.alert('Remove Failed', error.message || 'Unable to remove the local AI package.');
+    } finally {
+      setAiBusy(false);
+    }
+  };
 
   const clearData = () => {
     Alert.alert('Clear All Data', 'Delete ALL financial data? This cannot be undone.', [
@@ -864,7 +1011,7 @@ export function ProfileScreen({ profile, onLogout }) {
     { icon: '🔒', title: 'Data Encryption',   desc: 'PIN-derived key, AES-256-GCM (production)' },
     { icon: '📱', title: 'Local SQLite Only',  desc: 'finsight.db on-device, never synced' },
     { icon: '🚫', title: 'No Banking APIs',    desc: 'No Plaid, Yodlee or bank connection' },
-    { icon: '🤖', title: 'AI Privacy',         desc: 'Only anonymized totals sent to Claude API' },
+    { icon: '🤖', title: 'AI Privacy',         desc: 'AI responses stay on-device through a local offline runtime' },
   ];
 
   return (
@@ -887,6 +1034,25 @@ export function ProfileScreen({ profile, onLogout }) {
       </Card>
 
       {/* Privacy */}
+      <Card style={{ marginBottom: 16 }}>
+        <SectionHeader title="On-Device AI" />
+        <Text style={styles.privacyDesc}>{aiStatus.detail}</Text>
+        <Text style={[styles.txMeta, { marginTop: 8 }]}>
+          {aiStatus.ready
+            ? `Installed model: ${aiStatus.name || aiStatus.modelId} • ${formatModelSize(aiStatus.sizeBytes)}`
+            : aiStatus.recommendedModel
+              ? `Recommended download: ${aiStatus.recommendedModel.name} • ${formatModelSize(aiStatus.recommendedModel.sizeBytes)}`
+              : 'No recommended package is available yet.'}
+        </Text>
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+          {!aiStatus.ready ? (
+            <Btn onPress={installAi} disabled={aiBusy} fullWidth>{aiBusy ? 'Installing...' : 'Install Local AI'}</Btn>
+          ) : (
+            <Btn variant="outline" onPress={removeAi} disabled={aiBusy} fullWidth>{aiBusy ? 'Removing...' : 'Remove Local AI'}</Btn>
+          )}
+        </View>
+      </Card>
+
       <Card style={{ marginBottom: 16 }}>
         <SectionHeader title="Privacy & Security" />
         {privacyItems.map((item, i) => (
@@ -998,11 +1164,17 @@ const styles = StyleSheet.create({
   dropZoneText:      { color: colors.text, fontWeight: font.weights.semibold, fontSize: font.sizes.md },
   dropZoneSub:       { color: colors.textMuted, fontSize: font.sizes.sm, marginTop: 4 },
   mapHint:           { color: colors.textMuted, fontSize: font.sizes.sm, marginBottom: 16 },
+  importHint:        { color: colors.textMuted, fontSize: font.sizes.xs, marginTop: 10, lineHeight: 18 },
+  ocrInput:          { minHeight: 180, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: 14, color: colors.text, fontSize: font.sizes.sm, marginBottom: 16, textAlignVertical: 'top' },
+  ocrPreviewCard:    { backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: 12 },
   doneState:         { alignItems: 'center', paddingVertical: 20 },
   doneTitle:         { fontSize: font.sizes.xl, fontWeight: font.weights.bold, color: colors.text, marginTop: 12 },
   apiKeyBanner:      { backgroundColor: colors.surfaceAlt, padding: 16, borderBottomWidth: 1, borderColor: colors.border },
+  assistantReadyBanner: { borderBottomColor: `${colors.success}40`, backgroundColor: `${colors.success}12` },
+  assistantSetupBanner: { borderBottomColor: `${colors.warning}40`, backgroundColor: `${colors.warning}10` },
   apiKeyText:        { color: colors.text, fontSize: font.sizes.sm, fontWeight: font.weights.semibold },
   apiKeyNote:        { color: colors.textMuted, fontSize: font.sizes.xs, marginTop: 6 },
+  assistantActionRow: { marginTop: 12, alignItems: 'flex-start' },
   msgRow:            { marginBottom: 12, alignItems: 'flex-start' },
   msgRowUser:        { alignItems: 'flex-end' },
   msgBubble:         { maxWidth: '80%', borderRadius: 16, padding: 12 },

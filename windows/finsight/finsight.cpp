@@ -74,7 +74,17 @@ _Use_decl_annotations_ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE, PSTR 
   // Get the AppWindow so we can configure its initial title and size
   auto appWindow{reactNativeWin32App.AppWindow()};
   appWindow.Title(L"finsight");
-  appWindow.Resize({1000, 1000});
+
+  // Center the window on screen
+  auto displayArea = winrt::Microsoft::UI::Windowing::DisplayArea::GetFromWindowId(appWindow.Id(), winrt::Microsoft::UI::Windowing::DisplayAreaFallback::Nearest);
+  auto workArea = displayArea.WorkArea();
+  int32_t width = 1000;
+  int32_t height = 1000;
+  int32_t x = workArea.X + (workArea.Width - width) / 2;
+  int32_t y = workArea.Y + (workArea.Height - height) / 2;
+  appWindow.MoveAndResize({x, y, width, height});
+
+  appWindow.SetIcon(L"Assets\\finsight.ico");
 
   // Get the ReactViewOptions so we can set the initial RN component to load
   auto viewOptions{reactNativeWin32App.ReactViewOptions()};

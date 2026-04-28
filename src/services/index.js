@@ -5,6 +5,7 @@
 import { getDB, generateId, hashPin, saveSession, clearSession } from '../db/database';
 import { emitDataChanged } from '../db/changeEvents';
 import { CategorizationEngine, AnomalyDetectionEngine, ForecastingEngine, RecommendationEngine, SubscriptionEngine } from '../engines';
+import { AIModelManager, AIRuntime } from '../ai';
 
 // ─────────────────────────────────────────────
 // Auth & Security Service
@@ -65,7 +66,7 @@ export const FinancialDataService = {
   async addTransaction(profileId, data) {
     const db = await getDB();
     const cats = await db.getAllAsync('SELECT * FROM categories');
-    const category_id = data.category_id || CategorizationEngine.categorize(data.merchant, cats);
+    const category_id = data.category_id || CategorizationEngine.resolveCategory(data, cats);
     const id = generateId('tx');
 
     await db.runAsync(
@@ -114,6 +115,16 @@ export const FinancialDataService = {
 // ─────────────────────────────────────────────
 
 export const ImportIntegrationService = {
+  normalizeAmount(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return NaN;
+    const negative = raw.includes('(') && raw.includes(')') ? -1 : 1;
+    const normalized = raw.replace(/[$,\s()]/g, '');
+    const parsed = parseFloat(normalized);
+    if (Number.isNaN(parsed)) return NaN;
+    return parsed * negative;
+  },
+
   parseCSV(text) {
     const lines = text.trim().split('\n');
     if (lines.length < 2) return { error: 'CSV must have headers and data rows' };
@@ -132,16 +143,75 @@ export const ImportIntegrationService = {
     return rows.map(r => ({
       date:     r[mapping.date] || '',
       merchant: r[mapping.merchant] || '',
-      amount:   parseFloat((r[mapping.amount] || '0').replace(/[$,]/g, '')),
+      amount:   this.normalizeAmount(r[mapping.amount] || '0'),
       note:     r[mapping.note] || '',
+      category: mapping.category ? (r[mapping.category] || '') : '',
     })).filter(r => r.date && !isNaN(r.amount));
+  },
+
+  parseOCRText(text) {
+    const lines = String(text || '')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    const dateRegex = /(\d{4}-\d{2}-\d{2}|\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?)/;
+    const amountRegex = /[-+]?[$]?\(?\d[\d,]*\.\d{2}\)?/g;
+    const rows = [];
+
+    const normalizeDate = (value) => {
+      if (!value) return '';
+      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+
+      const [left, middle, right] = value.split(/[/-]/);
+      const year = right.length === 2 ? `20${right}` : right;
+      return `${year.padStart(4, '20')}-${middle.padStart(2, '0')}-${left.padStart(2, '0')}`;
+    };
+
+    for (const line of lines) {
+      const dateMatch = line.match(dateRegex);
+      const amounts = line.match(amountRegex) || [];
+      if (!dateMatch || !amounts.length) continue;
+
+      const amountText = amounts[amounts.length - 1];
+      let amount = this.normalizeAmount(amountText);
+      if (Number.isNaN(amount)) continue;
+
+      const merchant = line
+        .replace(dateMatch[0], '')
+        .replace(amountText, '')
+        .replace(/\b(card|purchase|debit|credit|pending|posted|pos|visa|mc)\b/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (!merchant) continue;
+
+      if (amount > 0 && !/\b(payroll|deposit|refund|credit|interest|income)\b/i.test(line)) {
+        amount *= -1;
+      }
+
+      const note = line !== merchant ? line : '';
+      rows.push({
+        date: normalizeDate(dateMatch[0]),
+        merchant,
+        amount,
+        note,
+        category: '',
+      });
+    }
+
+    if (!rows.length) {
+      return { error: 'No transaction-like rows were detected. Paste OCR text that includes a date and amount on each line.' };
+    }
+
+    return { rows };
   },
 
   generateHash(tx) {
     return Buffer.from(`${tx.date}|${tx.merchant}|${tx.amount}`).toString('base64');
   },
 
-  async importTransactions(profileId, mappedRows) {
+  async importTransactions(profileId, mappedRows, source = 'csv') {
     const db = await getDB();
     const existing = await db.getAllAsync(
       'SELECT hash FROM transactions WHERE profile_id = ? AND hash IS NOT NULL',
@@ -150,21 +220,24 @@ export const ImportIntegrationService = {
     const existingHashes = new Set(existing.map(t => t.hash));
     const cats = await db.getAllAsync('SELECT * FROM categories');
 
-    let imported = 0, duplicates = 0;
+    let imported = 0, duplicates = 0, autoCategorized = 0, uncategorized = 0;
     for (const row of mappedRows) {
       const hash = this.generateHash(row);
       if (existingHashes.has(hash)) { duplicates++; continue; }
-      const category_id = CategorizationEngine.categorize(row.merchant, cats);
+      const explicitCategory = CategorizationEngine.findExplicitCategory(row.category, cats);
+      const category_id = explicitCategory?.id || CategorizationEngine.resolveCategory(row, cats);
+      if (!explicitCategory && category_id !== 'cat_other') autoCategorized++;
+      if (category_id === 'cat_other') uncategorized++;
       await db.runAsync(
         'INSERT INTO transactions (id, profile_id, date, merchant, amount, category_id, note, source, hash, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
-        [generateId('tx'), profileId, row.date, row.merchant, row.amount, category_id, row.note || '', 'csv', hash, new Date().toISOString()]
+        [generateId('tx'), profileId, row.date, row.merchant, row.amount, category_id, row.note || '', source, hash, new Date().toISOString()]
       );
       imported++;
     }
     if (imported > 0) {
       emitDataChanged();
     }
-    return { imported, duplicates };
+    return { imported, duplicates, autoCategorized, uncategorized };
   },
 };
 
@@ -255,6 +328,118 @@ export const ReportingAnalyticsService = {
     })).filter(f => f.forecast);
 
     return { totalSpend, lastMonthSpend, totalIncome, spendByCategory, cats, budgets, recommendations, anomalies, subscriptions, forecasts };
+  },
+};
+
+function formatCurrency(amount) {
+  return `$${Number(amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function buildFallbackAnswer(message, context) {
+  const lower = String(message || '').toLowerCase();
+  const topCategory = Object.entries(context.spendByCategory || {}).sort((left, right) => right[1] - left[1])[0];
+  const overBudget = (context.budgets || []).filter((budget) => budget.limit && budget.spent / budget.limit >= 0.9);
+
+  if (lower.includes('budget')) {
+    if (!context.budgets?.length) {
+      return 'You do not have active budgets yet. Start with your biggest spending category so the assistant can track progress against a monthly target.';
+    }
+
+    if (!overBudget.length) {
+      return 'Your tracked budgets are not near the limit right now. Keep watching your top spending category and check again around mid-month.';
+    }
+
+    return overBudget
+      .slice(0, 2)
+      .map((budget) => `${budget.category} is at ${Math.round((budget.spent / budget.limit) * 100)}% of budget (${formatCurrency(budget.spent)} of ${formatCurrency(budget.limit)}).`)
+      .join(' ');
+  }
+
+  if (lower.includes('save') || lower.includes('cut back')) {
+    if (topCategory) {
+      return `${topCategory[0]} is your largest spending area at ${formatCurrency(topCategory[1])}. Reducing that category by 10% would save about ${formatCurrency(topCategory[1] * 0.1)} this month.`;
+    }
+
+    return 'Import a few transactions first and I can point to the most expensive category.';
+  }
+
+  if (lower.includes('food') || lower.includes('dining')) {
+    const foodSpend = Number((context.spendByCategory || {})['Food & Dining'] || 0);
+    return `Food and dining spend is ${formatCurrency(foodSpend)} this month. Trimming even one or two restaurant purchases each week would move that number quickly.`;
+  }
+
+  return `${context.summary || 'Your local finance summary is ready.'} ${topCategory ? `Your highest category is ${topCategory[0]} at ${formatCurrency(topCategory[1])}.` : ''}`.trim();
+}
+
+export const LocalAIService = {
+  async getStatus() {
+    const [status, recommendedModel] = await Promise.all([
+      AIModelManager.getStatus(),
+      AIModelManager.getRecommendedModel(),
+    ]);
+
+    if (status.state === 'installed') {
+      return {
+        ...status,
+        ready: true,
+        detail: `${status.name} is installed locally and ready for mobile runtime integration.`,
+      };
+    }
+
+    if (status.state === 'downloading') {
+      return {
+        ...status,
+        ready: false,
+        detail: `Downloading ${recommendedModel?.name || 'local AI model'}...`,
+      };
+    }
+
+    return {
+      ...status,
+      ready: false,
+      recommendedModel,
+      detail: recommendedModel
+        ? `Download ${recommendedModel.name} (${Math.round(recommendedModel.sizeBytes / (1024 * 1024))} MB) to enable local AI after install.`
+        : 'No local AI model manifest is available yet.',
+    };
+  },
+
+  async installRecommendedModel(onProgress) {
+    const model = await AIModelManager.getRecommendedModel();
+    if (!model) {
+      throw new Error('No recommended local AI model is available.');
+    }
+    return AIModelManager.install(model.id, onProgress);
+  },
+
+  async removeInstalledModel() {
+    await AIRuntime.unloadModel();
+    return AIModelManager.removeInstalledModel();
+  },
+
+  async ask(message, context, onChunk) {
+    const status = await AIModelManager.getStatus();
+    if (status.state !== 'installed') {
+      const fallback = `${buildFallbackAnswer(message, context)}\n\nInstall the local model package to enable fully on-device AI responses.`;
+      onChunk?.(fallback);
+      return fallback;
+    }
+
+    try {
+      await AIRuntime.loadModel();
+      const result = await AIRuntime.generate({
+        userPrompt: message,
+        contextSummary: context.summary,
+      });
+      const answer = `${result.text}\n\n${buildFallbackAnswer(message, context)}`;
+      onChunk?.(answer);
+      return answer;
+    } catch (error) {
+      console.warn('Local AI runtime failed:', error);
+      const fallback = `${buildFallbackAnswer(message, context)}\n\nThe local model package is installed, but the native mobile inference bridge is not connected yet.`;
+      onChunk?.(fallback);
+      return fallback;
+    }
   },
 };
 
