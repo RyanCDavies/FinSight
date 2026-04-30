@@ -3,6 +3,7 @@
 #include "OcrScannerModule.h"
 
 #include <algorithm>
+#include <memory>
 #include <commdlg.h>
 #include <cwctype>
 #include <filesystem>
@@ -17,6 +18,8 @@
 #include <winrt/Windows.Storage.Streams.h>
 
 namespace {
+
+using ReactPromiseType = winrt::Microsoft::ReactNative::ReactPromise<winrt::Microsoft::ReactNative::JSValue>;
 
 std::string WideToUtf8(std::wstring const &value) {
   if (value.empty()) {
@@ -42,7 +45,7 @@ std::wstring ToFileUri(std::wstring const &path) {
   return L"file:///" + normalized;
 }
 
-winrt::Windows::Storage::StorageFile PickImageFile() {
+std::wstring PickImageFilePath() {
   wchar_t filePath[4096] = {};
   OPENFILENAMEW dialog{};
   dialog.lStructSize = sizeof(dialog);
@@ -56,7 +59,7 @@ winrt::Windows::Storage::StorageFile PickImageFile() {
   if (!GetOpenFileNameW(&dialog)) {
     const DWORD error = CommDlgExtendedError();
     if (error == 0) {
-      return nullptr;
+      return {};
     }
     throw std::runtime_error("Unable to open the Windows image picker.");
   }
@@ -66,35 +69,111 @@ winrt::Windows::Storage::StorageFile PickImageFile() {
     throw std::runtime_error("Please choose a supported image file.");
   }
 
-  return winrt::Windows::Storage::StorageFile::GetFileFromPathAsync(path).get();
+  return path;
 }
 
-winrt::Windows::Foundation::IAsyncOperation<winrt::Windows::Storage::StorageFile> CapturePhotoFromCameraAsync(HWND windowHandle) {
-  const auto windowId = winrt::Microsoft::UI::GetWindowIdFromWindow(windowHandle);
-  winrt::Microsoft::Windows::Media::Capture::CameraCaptureUI cameraUi(windowId);
-  cameraUi.PhotoSettings().AllowCropping(false);
-  cameraUi.PhotoSettings().Format(winrt::Microsoft::Windows::Media::Capture::CameraCaptureUIPhotoFormat::Jpeg);
-  co_return co_await cameraUi.CaptureFileAsync(winrt::Microsoft::Windows::Media::Capture::CameraCaptureUIMode::Photo);
+void RejectPromise(std::shared_ptr<ReactPromiseType> const &promise, char const *message) {
+  promise->Reject(message);
 }
 
-winrt::Windows::Foundation::IAsyncOperation<winrt::hstring> RecognizeTextAsync(
-    winrt::Windows::Storage::StorageFile const &file) {
+void StartOcrRecognition(
+    std::wstring const &path,
+    std::wstring const &mode,
+    std::shared_ptr<ReactPromiseType> const &promise) {
   using winrt::Windows::Graphics::Imaging::BitmapAlphaMode;
   using winrt::Windows::Graphics::Imaging::BitmapDecoder;
   using winrt::Windows::Graphics::Imaging::BitmapPixelFormat;
   using winrt::Windows::Media::Ocr::OcrEngine;
   using winrt::Windows::Storage::FileAccessMode;
 
-  const auto stream = co_await file.OpenAsync(FileAccessMode::Read);
-  const auto decoder = co_await BitmapDecoder::CreateAsync(stream);
-  const auto bitmap = co_await decoder.GetSoftwareBitmapAsync(BitmapPixelFormat::Bgra8, BitmapAlphaMode::Premultiplied);
-  const auto engine = OcrEngine::TryCreateFromUserProfileLanguages();
-  if (!engine) {
-    throw std::runtime_error("Windows OCR is unavailable on this device.");
-  }
+  const auto name = std::filesystem::path(path).filename().wstring();
+  auto fileOp = winrt::Windows::Storage::StorageFile::GetFileFromPathAsync(path);
+  fileOp.Completed([mode, promise, path, name](auto const &fileInfo, winrt::Windows::Foundation::AsyncStatus fileStatus) {
+    try {
+      if (fileStatus != winrt::Windows::Foundation::AsyncStatus::Completed) {
+        RejectPromise(promise, "Unable to access the selected image.");
+        return;
+      }
 
-  const auto scanResult = co_await engine.RecognizeAsync(bitmap);
-  co_return scanResult.Text();
+      const auto file = fileInfo.GetResults();
+      auto openOp = file.OpenAsync(FileAccessMode::Read);
+      openOp.Completed([mode, promise, path, name](auto const &streamInfo, winrt::Windows::Foundation::AsyncStatus status) {
+        try {
+          if (status != winrt::Windows::Foundation::AsyncStatus::Completed) {
+            RejectPromise(promise, "Unable to open the scanned image.");
+            return;
+          }
+
+          const auto stream = streamInfo.GetResults();
+          auto decoderOp = BitmapDecoder::CreateAsync(stream);
+          decoderOp.Completed([mode, promise, path, name](auto const &decoderInfo, winrt::Windows::Foundation::AsyncStatus decoderStatus) {
+            try {
+              if (decoderStatus != winrt::Windows::Foundation::AsyncStatus::Completed) {
+                RejectPromise(promise, "Unable to decode the scanned image.");
+                return;
+              }
+
+              const auto decoder = decoderInfo.GetResults();
+              auto bitmapOp = decoder.GetSoftwareBitmapAsync(BitmapPixelFormat::Bgra8, BitmapAlphaMode::Premultiplied);
+              bitmapOp.Completed([mode, promise, path, name](auto const &bitmapInfo, winrt::Windows::Foundation::AsyncStatus bitmapStatus) {
+                try {
+                  if (bitmapStatus != winrt::Windows::Foundation::AsyncStatus::Completed) {
+                    RejectPromise(promise, "Unable to prepare the scanned image for OCR.");
+                    return;
+                  }
+
+                  const auto bitmap = bitmapInfo.GetResults();
+                  const auto engine = OcrEngine::TryCreateFromUserProfileLanguages();
+                  if (!engine) {
+                    RejectPromise(promise, "Windows OCR is unavailable on this device.");
+                    return;
+                  }
+
+                  auto recognizeOp = engine.RecognizeAsync(bitmap);
+                  recognizeOp.Completed([mode, promise, path, name](auto const &recognizeInfo, winrt::Windows::Foundation::AsyncStatus recognizeStatus) {
+                    try {
+                      if (recognizeStatus != winrt::Windows::Foundation::AsyncStatus::Completed) {
+                        RejectPromise(promise, "Unable to recognize text in the scanned image.");
+                        return;
+                      }
+
+                      const auto scanResult = recognizeInfo.GetResults();
+                      promise->Resolve(winrt::Microsoft::ReactNative::JSValueObject{
+                          {"imageUri", WideToUtf8(ToFileUri(path))},
+                          {"fileName", WideToUtf8(name)},
+                          {"mode", WideToUtf8(mode)},
+                          {"text", WideToUtf8(std::wstring(scanResult.Text().c_str()))},
+                      });
+                    } catch (std::exception const &ex) {
+                      promise->Reject(ex.what());
+                    } catch (...) {
+                      RejectPromise(promise, "Unable to recognize text in the scanned image.");
+                    }
+                  });
+                } catch (std::exception const &ex) {
+                  promise->Reject(ex.what());
+                } catch (...) {
+                  RejectPromise(promise, "Unable to prepare the scanned image for OCR.");
+                }
+              });
+            } catch (std::exception const &ex) {
+              promise->Reject(ex.what());
+            } catch (...) {
+              RejectPromise(promise, "Unable to decode the scanned image.");
+            }
+          });
+        } catch (std::exception const &ex) {
+          promise->Reject(ex.what());
+        } catch (...) {
+          RejectPromise(promise, "Unable to open the scanned image.");
+        }
+      });
+    } catch (std::exception const &ex) {
+      promise->Reject(ex.what());
+    } catch (...) {
+      RejectPromise(promise, "Unable to access the selected image.");
+    }
+  });
 }
 
 } // namespace
@@ -108,49 +187,34 @@ void OcrScannerModule::Initialize(winrt::Microsoft::ReactNative::ReactContext co
 void OcrScannerModule::scanImage(
     std::wstring const &mode,
     winrt::Microsoft::ReactNative::ReactPromise<winrt::Microsoft::ReactNative::JSValue> &&result) noexcept {
+  auto promise = std::make_shared<ReactPromiseType>(std::move(result));
   auto uiDispatcher = m_context.UIDispatcher();
   if (!uiDispatcher) {
-    result.Reject("Windows OCR scanning is unavailable.");
+    promise->Reject("Windows OCR scanning is unavailable.");
     return;
   }
 
-  uiDispatcher.Post([mode, result = std::move(result)]() mutable noexcept {
-    auto operation = [mode, result = std::move(result)]() -> winrt::fire_and_forget {
+    uiDispatcher.Post([mode, promise]() noexcept {
       try {
-        const HWND windowHandle = GetActiveWindow();
-        winrt::Windows::Storage::StorageFile file = nullptr;
-
         if (_wcsicmp(mode.c_str(), L"camera") == 0) {
-          if (!windowHandle) {
-            throw std::runtime_error("Unable to access the active app window for camera capture.");
-          }
-          file = co_await CapturePhotoFromCameraAsync(windowHandle);
-        } else {
-          file = PickImageFile();
+          RejectPromise(
+              promise,
+              "Direct camera capture is currently unavailable on Windows in this build. Please take the photo with the Windows Camera app, then choose the saved image to scan.");
+          return;
         }
 
-        if (!file) {
-          result.Resolve(nullptr);
-          co_return;
-        }
-
-        const std::wstring path = file.Path().c_str();
-        const std::wstring name = file.Name().c_str();
-        const winrt::hstring text = co_await RecognizeTextAsync(file);
-        result.Resolve(winrt::Microsoft::ReactNative::JSValueObject{
-            {"imageUri", WideToUtf8(ToFileUri(path))},
-            {"fileName", WideToUtf8(name)},
-            {"mode", WideToUtf8(mode)},
-            {"text", WideToUtf8(text.c_str())},
-        });
-      } catch (std::exception const &ex) {
-        result.Reject(ex.what());
-      } catch (...) {
-        result.Reject("Unable to scan the selected image.");
+      const auto path = PickImageFilePath();
+      if (path.empty()) {
+        promise->Resolve(nullptr);
+        return;
       }
-    };
 
-    operation();
+      StartOcrRecognition(path, mode, promise);
+    } catch (std::exception const &ex) {
+      promise->Reject(ex.what());
+    } catch (...) {
+      RejectPromise(promise, "Unable to scan the selected image.");
+    }
   });
 }
 

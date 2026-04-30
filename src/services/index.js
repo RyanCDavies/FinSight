@@ -159,14 +159,16 @@ export const ImportIntegrationService = {
     const amountRegex = /[-+]?[$]?\(?\d[\d,]*\.\d{2}\)?/g;
     const rows = [];
 
-    const normalizeDate = (value) => {
-      if (!value) return '';
-      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+      const normalizeDate = (value) => {
+        if (!value) return '';
+        if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
 
-      const [left, middle, right] = value.split(/[/-]/);
-      const year = right.length === 2 ? `20${right}` : right;
-      return `${year.padStart(4, '20')}-${middle.padStart(2, '0')}-${left.padStart(2, '0')}`;
-    };
+        const [left, middle, right] = value.split(/[/-]/);
+        const fallbackYear = String(new Date().getFullYear());
+        const rawYear = right || fallbackYear;
+        const year = rawYear.length === 2 ? `20${rawYear}` : rawYear;
+        return `${year.padStart(4, '20')}-${middle.padStart(2, '0')}-${left.padStart(2, '0')}`;
+      };
 
     for (const line of lines) {
       const dateMatch = line.match(dateRegex);

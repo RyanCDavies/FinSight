@@ -1161,26 +1161,22 @@ function OCRScanReviewSheet({ profile, categories, onClose }) {
   ) : null;
 
   return (
-    <BottomSheet visible title="Scan Transaction" onClose={onClose} footer={scanFooter}>
-      {!currentDraft && savedCount === 0 && (
-        <View>
-          <Text style={styles.mapHint}>Choose a receipt, statement screenshot, or bank image. Mobile opens your camera roll by default, and both mobile and Windows can also take a photo first.</Text>
-          <View style={styles.scanActionColumn}>
-            <Btn onPress={() => startScan('library')} fullWidth disabled={loading}>{loading ? 'Scanning...' : 'Choose Image'}</Btn>
-            <Btn variant="outline" onPress={() => startScan('camera')} fullWidth disabled={loading}>{loading ? 'Scanning...' : 'Take Photo'}</Btn>
-          </View>
-          <Text style={styles.importHint}>If OCR already ran elsewhere, you can paste the raw text below and review it in the same transaction form.</Text>
-          <TextInput
-            value={ocrText}
-            onChangeText={setOcrText}
-            multiline
-            placeholder={'04/20/2026 STARBUCKS 6.75\n04/21/2026 PAYROLL DEPOSIT 1200.00'}
-            placeholderTextColor={colors.textMuted}
-            style={styles.ocrInput}
-          />
-          <Btn onPress={() => analyzeText(ocrText)} fullWidth disabled={loading || !ocrText.trim()}>Use Pasted OCR Text</Btn>
-        </View>
-      )}
+      <BottomSheet visible title="Scan Transaction" onClose={onClose} footer={scanFooter}>
+        {!currentDraft && savedCount === 0 && (
+          <View>
+            <Text style={styles.mapHint}>
+              {Platform.OS === 'windows'
+                ? 'Choose a saved receipt image to scan. Windows direct camera capture is temporarily disabled in this build.'
+                : 'Scan or take a photo of a receipt or statement.'}
+            </Text>
+            <View style={styles.scanActionColumn}>
+              <Btn onPress={() => startScan('library')} fullWidth disabled={loading}>{loading ? 'Scanning...' : 'Choose Image'}</Btn>
+              {Platform.OS !== 'windows' && (
+                <Btn variant="outline" onPress={() => startScan('camera')} fullWidth disabled={loading}>{loading ? 'Scanning...' : 'Take Photo'}</Btn>
+              )}
+            </View>
+            </View>
+        )}
 
       {!!currentDraft && (
         <View style={{ gap: 14 }}>
@@ -1878,5 +1874,3 @@ const styles = StyleSheet.create({
   statCell:          { alignItems: 'center' },
   statBig:           { fontSize: font.sizes.xxl, fontWeight: font.weights.bold, color: colors.text },
 });
-
-
