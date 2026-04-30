@@ -49,6 +49,10 @@ function normalizeState(rawState) {
   nextState.categories = Array.isArray(nextState.categories) ? nextState.categories : [];
   nextState.transactions = Array.isArray(nextState.transactions) ? nextState.transactions : [];
   nextState.budgets = Array.isArray(nextState.budgets) ? nextState.budgets : [];
+  nextState.budgets = nextState.budgets.map((budget) => ({
+    ...budget,
+    description: typeof budget.description === 'string' ? budget.description : '',
+  }));
 
   if (nextState.categories.length === 0) {
     nextState.categories = buildDefaultCategories();
@@ -309,7 +313,7 @@ const db = {
       changed = nextTransactions.length !== state.transactions.length;
       state.transactions = nextTransactions;
     } else if (sql.startsWith('insert into budgets ') && sql.includes('on conflict')) {
-      const [id, profile_id, category_id, month, year, limit_amount, created_at] = params;
+      const [id, profile_id, category_id, month, year, limit_amount, description, created_at] = params;
       const existing = state.budgets.find((item) =>
         item.profile_id === profile_id &&
         item.category_id === category_id &&
@@ -319,12 +323,13 @@ const db = {
 
       if (existing) {
         existing.limit_amount = limit_amount;
+        existing.description = description;
       } else {
-        state.budgets.push({ id, profile_id, category_id, month, year, limit_amount, created_at });
+        state.budgets.push({ id, profile_id, category_id, month, year, limit_amount, description, created_at });
       }
       changed = true;
     } else if (sql.startsWith('insert or ignore into budgets ')) {
-      const [id, profile_id, category_id, month, year, limit_amount, created_at] = params;
+      const [id, profile_id, category_id, month, year, limit_amount, description, created_at] = params;
       const existing = state.budgets.find((item) =>
         item.profile_id === profile_id &&
         item.category_id === category_id &&
@@ -333,7 +338,16 @@ const db = {
       );
 
       if (!existing) {
-        state.budgets.push({ id, profile_id, category_id, month, year, limit_amount, created_at });
+        state.budgets.push({ id, profile_id, category_id, month, year, limit_amount, description, created_at });
+        changed = true;
+      }
+    } else if (sql === 'update budgets set category_id = ?, limit_amount = ?, description = ? where id = ?') {
+      const [category_id, limit_amount, description, id] = params;
+      const existing = state.budgets.find((item) => item.id === id);
+      if (existing) {
+        existing.category_id = category_id;
+        existing.limit_amount = limit_amount;
+        existing.description = description;
         changed = true;
       }
     } else if (sql === 'delete from budgets where id = ?') {

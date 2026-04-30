@@ -201,7 +201,42 @@ export const ImportIntegrationService = {
     }
 
     if (!rows.length) {
-      return { error: 'No transaction-like rows were detected. Paste OCR text that includes a date and amount on each line.' };
+      const fullText = lines.join('\n');
+      const fullTextLower = fullText.toLowerCase();
+      const preferredAmountLine = lines.find((line) =>
+        /\b(grand total|total due|amount due|amount paid|payment total|total|balance due)\b/i.test(line)
+      );
+      const receiptAmounts = (preferredAmountLine || fullText).match(amountRegex) || [];
+      const dateMatch = fullText.match(dateRegex);
+      const merchantLine = lines.find((line) =>
+        /[a-z]/i.test(line) &&
+        !dateRegex.test(line) &&
+        !(line.match(amountRegex) || []).length &&
+        !/\b(receipt|invoice|subtotal|tax|change|cash|visa|mastercard|amex|thank you)\b/i.test(line)
+      );
+
+      if (receiptAmounts.length && merchantLine) {
+        let amount = this.normalizeAmount(receiptAmounts[receiptAmounts.length - 1]);
+        if (!Number.isNaN(amount)) {
+          if (amount > 0 && !/\b(refund|deposit|credit|income|payroll)\b/i.test(fullTextLower)) {
+            amount *= -1;
+          }
+
+          return {
+            rows: [
+              {
+                date: dateMatch ? normalizeDate(dateMatch[0]) : new Date().toISOString().slice(0, 10),
+                merchant: merchantLine.replace(/\s+/g, ' ').trim(),
+                amount,
+                note: fullText,
+                category: '',
+              },
+            ],
+          };
+        }
+      }
+
+      return { error: 'No transaction-like rows were detected. Scan a receipt, statement, or OCR text that includes a recognizable amount.' };
     }
 
     return { rows };
@@ -251,13 +286,22 @@ export const BudgetingGoalService = {
     return db.getAllAsync('SELECT * FROM budgets WHERE profile_id = ?', [profileId]);
   },
 
-  async setBudget(profileId, categoryId, month, year, limitAmount) {
+  async setBudget(profileId, categoryId, month, year, limitAmount, description = '') {
     const db = await getDB();
     await db.runAsync(
-      `INSERT INTO budgets (id, profile_id, category_id, month, year, limit_amount, created_at)
-       VALUES (?,?,?,?,?,?,?)
-       ON CONFLICT(profile_id, category_id, month, year) DO UPDATE SET limit_amount = excluded.limit_amount`,
-      [generateId('budget'), profileId, categoryId, month, year, limitAmount, new Date().toISOString()]
+      `INSERT INTO budgets (id, profile_id, category_id, month, year, limit_amount, description, created_at)
+       VALUES (?,?,?,?,?,?,?,?)
+       ON CONFLICT(profile_id, category_id, month, year) DO UPDATE SET limit_amount = excluded.limit_amount, description = excluded.description`,
+      [generateId('budget'), profileId, categoryId, month, year, limitAmount, description, new Date().toISOString()]
+    );
+    emitDataChanged();
+  },
+
+  async updateBudget(id, { categoryId, limitAmount, description = '' }) {
+    const db = await getDB();
+    await db.runAsync(
+      'UPDATE budgets SET category_id = ?, limit_amount = ?, description = ? WHERE id = ?',
+      [categoryId, limitAmount, description, id]
     );
     emitDataChanged();
   },
@@ -313,6 +357,29 @@ export const ReportingAnalyticsService = {
     const totalSpend   = thisMonthTx.filter(t => parseFloat(t.amount) < 0).reduce((s, t) => s + Math.abs(parseFloat(t.amount)), 0);
     const lastMonthSpend = lastMonthTx.filter(t => parseFloat(t.amount) < 0).reduce((s, t) => s + Math.abs(parseFloat(t.amount)), 0);
     const totalIncome  = thisMonthTx.filter(t => parseFloat(t.amount) > 0).reduce((s, t) => s + parseFloat(t.amount), 0);
+    const monthlyTrend = Array.from({ length: 6 }, (_, index) => {
+      const date = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1);
+      return {
+        key: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`,
+        label: date.toLocaleDateString('en-US', { month: 'short' }),
+        fullLabel: date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+        spend: 0,
+        income: 0,
+      };
+    });
+    const monthlyTrendByKey = Object.fromEntries(monthlyTrend.map((month) => [month.key, month]));
+
+    allTx.forEach((transaction) => {
+      const monthKey = String(transaction.date || '').slice(0, 7);
+      const targetMonth = monthlyTrendByKey[monthKey];
+      if (!targetMonth) return;
+
+      const amount = parseFloat(transaction.amount);
+      if (Number.isNaN(amount)) return;
+
+      if (amount < 0) targetMonth.spend += Math.abs(amount);
+      if (amount > 0) targetMonth.income += amount;
+    });
 
     const spendByCategory = {};
     thisMonthTx.filter(t => parseFloat(t.amount) < 0).forEach(t => {
@@ -327,7 +394,7 @@ export const ReportingAnalyticsService = {
       forecast: ForecastingEngine.forecast(allTx, cat.id),
     })).filter(f => f.forecast);
 
-    return { totalSpend, lastMonthSpend, totalIncome, spendByCategory, cats, budgets, recommendations, anomalies, subscriptions, forecasts };
+    return { totalSpend, lastMonthSpend, totalIncome, monthlyTrend, spendByCategory, cats, budgets, recommendations, anomalies, subscriptions, forecasts };
   },
 };
 
@@ -497,8 +564,8 @@ export async function seedDemoData(profileId) {
   const yr = String(now.getFullYear());
   for (const [catId, limit] of [['cat_food', 400], ['cat_shopping', 300], ['cat_entertainment', 80], ['cat_transport', 200]]) {
     await db.runAsync(
-      'INSERT OR IGNORE INTO budgets (id, profile_id, category_id, month, year, limit_amount, created_at) VALUES (?,?,?,?,?,?,?)',
-      [generateId('budget'), profileId, catId, mo, yr, limit, new Date().toISOString()]
+      'INSERT OR IGNORE INTO budgets (id, profile_id, category_id, month, year, limit_amount, description, created_at) VALUES (?,?,?,?,?,?,?,?)',
+      [generateId('budget'), profileId, catId, mo, yr, limit, '', new Date().toISOString()]
     );
   }
 

@@ -4,8 +4,8 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, Alert, FlatList, KeyboardAvoidingView,
+  View, Text, ScrollView, TouchableOpacity, TextInput, Pressable, Image,
+  StyleSheet, Alert, SectionList, KeyboardAvoidingView,
   Platform, ActivityIndicator,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -18,9 +18,76 @@ import {
 import { saveSession, clearSession, getDB } from '../db/database';
 import { emitDataChanged, subscribeToDataChanges } from '../db/changeEvents';
 import { addCsvDropListener, pickCsvTextAsync, setCsvDropEnabled } from '../platform/csvImport';
+import { scanTransactionImageAsync } from '../platform/ocrScan';
 
 function isTextIcon(icon) {
   return /^[A-Za-z][A-Za-z0-9\s&/-]*$/.test(String(icon || '').trim());
+}
+
+function parseTransactionDate(dateValue) {
+  if (!dateValue || typeof dateValue !== 'string') return null;
+  const [year, month, day] = dateValue.split('-').map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+}
+
+function buildTransactionSections(transactions) {
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const lastWeek = [];
+  const monthlyGroups = new Map();
+  const yearlyGroups = new Map();
+
+  transactions.forEach((transaction) => {
+    const parsedDate = parseTransactionDate(transaction.date);
+    if (!parsedDate) {
+      const fallbackYear = String(transaction.date || 'Older').slice(0, 4) || 'Older';
+      if (!yearlyGroups.has(fallbackYear)) yearlyGroups.set(fallbackYear, []);
+      yearlyGroups.get(fallbackYear).push(transaction);
+      return;
+    }
+
+    const txDay = new Date(parsedDate.getFullYear(), parsedDate.getMonth(), parsedDate.getDate());
+    const diffDays = Math.floor((todayStart - txDay) / 86400000);
+
+    if (diffDays <= 6) {
+      lastWeek.push(transaction);
+      return;
+    }
+
+    if (parsedDate.getFullYear() === todayStart.getFullYear()) {
+      const monthKey = `${parsedDate.getFullYear()}-${String(parsedDate.getMonth() + 1).padStart(2, '0')}`;
+      if (!monthlyGroups.has(monthKey)) monthlyGroups.set(monthKey, []);
+      monthlyGroups.get(monthKey).push(transaction);
+      return;
+    }
+
+    const yearKey = String(parsedDate.getFullYear());
+    if (!yearlyGroups.has(yearKey)) yearlyGroups.set(yearKey, []);
+    yearlyGroups.get(yearKey).push(transaction);
+  });
+
+  const sections = [];
+  if (lastWeek.length) sections.push({ title: 'Past 7 Days', data: lastWeek });
+
+  Array.from(monthlyGroups.keys())
+    .sort((a, b) => b.localeCompare(a))
+    .forEach((monthKey) => {
+      const [year, month] = monthKey.split('-').map(Number);
+      const monthLabel = new Date(year, month - 1, 1).toLocaleString('en-US', {
+        month: 'long',
+        year: 'numeric',
+      });
+      sections.push({ title: monthLabel, data: monthlyGroups.get(monthKey) });
+    });
+
+  Array.from(yearlyGroups.keys())
+    .sort((a, b) => Number(b) - Number(a))
+    .forEach((year) => {
+      sections.push({ title: year, data: yearlyGroups.get(year) });
+    });
+
+  return sections;
 }
 
 function getCategoryLabel(category) {
@@ -34,6 +101,238 @@ function getCategoryLabel(category) {
 function formatModelSize(sizeBytes) {
   if (!sizeBytes) return 'Unknown size';
   return `${Math.round(sizeBytes / (1024 * 1024))} MB`;
+}
+
+function getTodayIsoDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function createEmptyTransactionForm() {
+  return { date: getTodayIsoDate(), merchant: '', amount: '', category_id: '', note: '' };
+}
+
+function validateTransactionForm(form) {
+  if (!form.date.trim()) {
+    return { title: 'Missing Field', message: 'Please enter a date.' };
+  }
+  if (!form.merchant.trim()) {
+    return { title: 'Missing Field', message: 'Please enter a merchant name.' };
+  }
+
+  const parsedAmount = parseFloat(form.amount);
+  if (!form.amount.trim() || Number.isNaN(parsedAmount)) {
+    return { title: 'Invalid Amount', message: 'Please enter a valid number for the amount (e.g. -12.50).' };
+  }
+
+  return { parsedAmount };
+}
+
+function isMobilePlatform() {
+  return Platform.OS === 'ios' || Platform.OS === 'android';
+}
+
+function SelectablePill({ label, active, onPress, activeStyle, activeTextStyle, style }) {
+  const [hovered, setHovered] = useState(false);
+  const isWindows = Platform.OS === 'windows';
+
+  return (
+    <Pressable
+      onPress={onPress}
+      onHoverIn={isWindows ? () => setHovered(true) : undefined}
+      onHoverOut={isWindows ? () => setHovered(false) : undefined}
+      style={[
+        styles.filterPill,
+        hovered && !active && styles.filterPillHover,
+        active && styles.filterPillActive,
+        active && activeStyle,
+        style,
+      ]}
+    >
+      <Text style={[styles.filterPillText, active && styles.filterPillTextActive, active && activeTextStyle]}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function TransactionFormFields({ form, setForm, categories }) {
+  return (
+    <View>
+      <Input label="Date (YYYY-MM-DD)" value={form.date} onChangeText={v => setForm(f => ({ ...f, date: v }))} placeholder="2025-01-15" />
+      <Input label="Merchant" value={form.merchant} onChangeText={v => setForm(f => ({ ...f, merchant: v }))} placeholder="e.g. Starbucks" />
+      <Input label="Amount (negative = expense)" value={form.amount} onChangeText={v => setForm(f => ({ ...f, amount: v }))} placeholder="-12.50" keyboardType="numeric" />
+      <Text style={styles.inputLabel}>Category</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={Platform.OS !== 'windows'} style={styles.sheetChipScroll} contentContainerStyle={styles.sheetChipScrollContent}>
+        {categories.map(c => (
+          <SelectablePill
+            key={c.id}
+            label={`${c.icon} ${c.name}`}
+            active={form.category_id === c.id}
+            activeStyle={{ backgroundColor: c.color, borderColor: c.color }}
+            onPress={() => setForm(f => ({ ...f, category_id: c.id }))}
+          />
+        ))}
+      </ScrollView>
+      <Input label="Note (optional)" value={form.note} onChangeText={v => setForm(f => ({ ...f, note: v }))} placeholder="Optional note" />
+    </View>
+  );
+}
+
+function formatMoney(amount, digits = 2) {
+  const numericAmount = Number(amount || 0);
+  const factor = 10 ** digits;
+  const truncated = Math.trunc(numericAmount * factor) / factor;
+  const fixed = truncated.toFixed(digits);
+  const [whole, fraction] = fixed.split('.');
+  const withCommas = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return fraction !== undefined ? `$${withCommas}.${fraction}` : `$${withCommas}`;
+}
+
+function formatScaleMoney(amount) {
+  return amount >= 1000 ? `$${(amount / 1000).toFixed(amount % 1000 === 0 ? 0 : 1)}k` : `$${amount}`;
+}
+
+function getChartGridStep(maxValue) {
+  if (maxValue <= 1000) return 250;
+  if (maxValue <= 2000) return 500;
+  return 1000;
+}
+
+function getChartScale(maxValue) {
+  const step = getChartGridStep(maxValue);
+  const roundedTop = Math.ceil((maxValue || 1) / step) * step;
+  const topLine = Math.max(step * 3, roundedTop);
+  const gridValues = [topLine - step * 3, topLine - step * 2, topLine - step, topLine].map((value) => Math.max(0, value));
+  const baseline = gridValues[0];
+
+  return {
+    baseline,
+    chartMax: topLine,
+    gridValues,
+  };
+}
+
+function CashFlowChartCard({ monthlyTrend, totalSpend, totalIncome, lastMonthSpend }) {
+  const [mode, setMode] = useState('spend');
+  const [activeMonthKey, setActiveMonthKey] = useState(null);
+  const chartColor = mode === 'spend' ? colors.danger : colors.success;
+  const activeBarColor = mode === 'spend' ? '#f87171' : '#34d399';
+  const values = monthlyTrend.map((month) => (mode === 'spend' ? month.spend : month.income));
+  const maxValue = Math.max(...values, 0);
+  const { baseline, chartMax, gridValues } = getChartScale(maxValue);
+  const chartRange = Math.max(chartMax - baseline, 1);
+  const currentMonth = monthlyTrend[monthlyTrend.length - 1] || { spend: totalSpend, income: totalIncome };
+  const previousMonth = monthlyTrend[monthlyTrend.length - 2] || { spend: lastMonthSpend, income: 0 };
+  const currentValue = mode === 'spend' ? currentMonth.spend : currentMonth.income;
+  const previousValue = mode === 'spend' ? previousMonth.spend : previousMonth.income;
+  const change = previousValue ? ((currentValue - previousValue) / previousValue) * 100 : null;
+
+  return (
+    <Card style={styles.heroCard}>
+      <View style={styles.heroHeaderRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.heroLabel}>6-MONTH CASH FLOW</Text>
+          <Text style={styles.heroSubLabel}>
+            {mode === 'spend' ? 'Monthly spending over the last 6 months' : 'Monthly income over the last 6 months'}
+          </Text>
+        </View>
+        <View style={styles.heroToggle}>
+          <Pressable onPress={() => setMode('spend')} style={[styles.heroToggleChip, mode === 'spend' && styles.heroToggleChipActive]}>
+            <Text style={[styles.heroToggleText, mode === 'spend' && styles.heroToggleTextActive]}>Spending</Text>
+          </Pressable>
+          <Pressable onPress={() => setMode('income')} style={[styles.heroToggleChip, mode === 'income' && styles.heroToggleChipActive]}>
+            <Text style={[styles.heroToggleText, mode === 'income' && styles.heroToggleTextActive]}>Income</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      <View style={styles.heroAmountRow}>
+        <Text style={styles.heroAmount}>{formatMoney(currentValue)}</Text>
+        {change !== null && (
+          <Badge color={change > 0 ? (mode === 'spend' ? colors.danger : colors.success) : (mode === 'spend' ? colors.success : colors.danger)}>
+            {change > 0 ? '+' : '-'}{Math.abs(change).toFixed(1)}%
+          </Badge>
+        )}
+      </View>
+
+      <View style={styles.chartWrap}>
+        <View style={styles.chartArea}>
+          {gridValues.map((value) => (
+            <View
+              key={value}
+              style={[styles.chartGridLine, { bottom: `${((value - baseline) / chartRange) * 100}%` }]}
+              pointerEvents="none"
+            >
+              <Text style={styles.chartGridLabel}>{formatScaleMoney(value)}</Text>
+              <View style={styles.chartGridStroke} />
+            </View>
+          ))}
+
+          <View style={styles.chartBarsRow}>
+            {monthlyTrend.map((month) => {
+              const value = mode === 'spend' ? month.spend : month.income;
+              const isActive = month.key === activeMonthKey;
+              const normalizedValue = Math.max(value - baseline, 0);
+              const barHeight = normalizedValue > 0 ? Math.max(12, (normalizedValue / chartRange) * 136) : 6;
+
+              return (
+                <View key={month.key} style={styles.chartColumn}>
+                  <View style={styles.chartBarSlot}>
+                    {isActive && (
+                      <View style={styles.chartTooltip} pointerEvents="none">
+                        <Text style={styles.chartTooltipMonth}>{month.fullLabel}</Text>
+                        <Text style={styles.chartTooltipValue}>{formatMoney(value)}</Text>
+                      </View>
+                    )}
+                    <Pressable
+                      onPress={() => setActiveMonthKey((current) => (current === month.key ? null : month.key))}
+                      onHoverIn={Platform.OS === 'windows' ? () => setActiveMonthKey(month.key) : undefined}
+                      onHoverOut={Platform.OS === 'windows' ? () => setActiveMonthKey(null) : undefined}
+                      style={styles.chartBarPressable}
+                    >
+                      <View
+                        style={[
+                          styles.chartBar,
+                          {
+                            height: barHeight,
+                            backgroundColor: isActive ? activeBarColor : chartColor,
+                          },
+                        ]}
+                      />
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+        <View style={styles.chartMonthRow}>
+          {monthlyTrend.map((month) => (
+            <View key={`${month.key}-label`} style={styles.chartMonthColumn}>
+              <Text style={styles.chartMonthLabel}>{month.label}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.heroStatsRow}>
+        <View>
+          <Text style={styles.statLabel}>Current Mode</Text>
+          <Text style={[styles.statValue, { color: chartColor }]}>{mode === 'spend' ? 'Spending' : 'Income'}</Text>
+        </View>
+        <View>
+          <Text style={styles.statLabel}>Last Month</Text>
+          <Text style={styles.statValue}>{formatMoney(previousValue)}</Text>
+        </View>
+        <View>
+          <Text style={styles.statLabel}>Balance</Text>
+          <Text style={[styles.statValue, { color: totalIncome - totalSpend >= 0 ? colors.success : colors.danger }]}>
+            {formatMoney(totalIncome - totalSpend)}
+          </Text>
+        </View>
+      </View>
+    </Card>
+  );
 }
 
 function buildAssistantContext(data) {
@@ -151,8 +450,7 @@ export function DashboardScreen({ profile, navigation }) {
 
   if (loading || !data) return <ScreenLoader />;
 
-  const { totalSpend, lastMonthSpend, totalIncome, spendByCategory, cats, budgets, recommendations, anomalies, subscriptions, forecasts } = data;
-  const spendChange    = lastMonthSpend ? ((totalSpend - lastMonthSpend) / lastMonthSpend * 100).toFixed(1) : null;
+  const { totalSpend, lastMonthSpend, totalIncome, monthlyTrend, spendByCategory, cats, budgets, recommendations, anomalies, subscriptions, forecasts } = data;
   const topCategories  = Object.entries(spendByCategory).sort((a, b) => b[1] - a[1]).slice(0, 5);
   const monthLabel     = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
@@ -170,22 +468,12 @@ export function DashboardScreen({ profile, navigation }) {
       </View>
 
       {/* Hero spend card */}
-      <Card style={styles.heroCard}>
-        <Text style={styles.heroLabel}>TOTAL SPENT THIS MONTH</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 12, marginBottom: 16 }}>
-          <Text style={styles.heroAmount}>${totalSpend.toLocaleString('en-US', { minimumFractionDigits: 2 })}</Text>
-          {spendChange !== null && (
-            <Badge color={parseFloat(spendChange) > 0 ? colors.danger : colors.success}>
-              {parseFloat(spendChange) > 0 ? '↑' : '↓'}{Math.abs(spendChange)}%
-            </Badge>
-          )}
-        </View>
-        <View style={{ flexDirection: 'row', gap: 24 }}>
-          <View><Text style={styles.statLabel}>Income</Text><Text style={[styles.statValue, { color: colors.success }]}>+${totalIncome.toLocaleString()}</Text></View>
-          <View><Text style={styles.statLabel}>Last Month</Text><Text style={styles.statValue}>${lastMonthSpend.toLocaleString()}</Text></View>
-          <View><Text style={styles.statLabel}>Balance</Text><Text style={[styles.statValue, { color: totalIncome - totalSpend >= 0 ? colors.success : colors.danger }]}>${(totalIncome - totalSpend).toFixed(0)}</Text></View>
-        </View>
-      </Card>
+      <CashFlowChartCard
+        monthlyTrend={monthlyTrend}
+        totalSpend={totalSpend}
+        totalIncome={totalIncome}
+        lastMonthSpend={lastMonthSpend}
+      />
 
       {/* Anomaly alert */}
       {anomalies.length > 0 && (
@@ -304,7 +592,9 @@ export function TransactionsScreen({ profile }) {
   const [showImport,   setShowImport]   = useState(false);
   const [showOcrImport, setShowOcrImport] = useState(false);
   const [editTx,       setEditTx]       = useState(null);
-  const [form,         setForm]         = useState({ date: new Date().toISOString().slice(0, 10), merchant: '', amount: '', category_id: '', note: '' });
+  const [expandedTxId, setExpandedTxId] = useState(null);
+  const [hoveredTxId,  setHoveredTxId]  = useState(null);
+  const [form,         setForm]         = useState(createEmptyTransactionForm);
 
   const load = useCallback(async () => {
     const [txs, cats] = await Promise.all([
@@ -316,24 +606,25 @@ export function TransactionsScreen({ profile }) {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => subscribeToDataChanges(load), [load]);
+  useEffect(() => {
+    if (expandedTxId && !transactions.some((transaction) => transaction.id === expandedTxId)) {
+      setExpandedTxId(null);
+    }
+  }, [expandedTxId, transactions]);
+  useEffect(() => {
+    if (hoveredTxId && !transactions.some((transaction) => transaction.id === hoveredTxId)) {
+      setHoveredTxId(null);
+    }
+  }, [hoveredTxId, transactions]);
 
   const handleSave = async () => {
-    // Validate required fields before saving
-    if (!form.date.trim()) {
-      Alert.alert('Missing Field', 'Please enter a date.');
-      return;
-    }
-    if (!form.merchant.trim()) {
-      Alert.alert('Missing Field', 'Please enter a merchant name.');
-      return;
-    }
-    const parsedAmount = parseFloat(form.amount);
-    if (!form.amount.trim() || isNaN(parsedAmount)) {
-      Alert.alert('Invalid Amount', 'Please enter a valid number for the amount (e.g. -12.50).');
+    const validation = validateTransactionForm(form);
+    if (validation.title) {
+      Alert.alert(validation.title, validation.message);
       return;
     }
 
-    // Confirm before committing to the database
+    const { parsedAmount } = validation;
     const action = editTx ? 'Update' : 'Add';
     const summary = `${form.merchant} · $${Math.abs(parsedAmount).toFixed(2)} · ${form.date}`;
     Alert.alert(
@@ -351,7 +642,7 @@ export function TransactionsScreen({ profile }) {
             }
             setShowAdd(false);
             setEditTx(null);
-            setForm({ date: new Date().toISOString().slice(0, 10), merchant: '', amount: '', category_id: '', note: '' });
+            setForm(createEmptyTransactionForm());
             load();
           },
         },
@@ -367,6 +658,7 @@ export function TransactionsScreen({ profile }) {
   };
 
   const getCat = (id) => categories.find(c => c.id === id);
+  const transactionSections = buildTransactionSections(transactions);
 
   const renderTx = ({ item: tx }) => {
     const cat = getCat(tx.category_id);
@@ -396,6 +688,77 @@ export function TransactionsScreen({ profile }) {
       </View>
     );
   };
+
+  const renderExpandableTx = ({ item: tx }) => {
+    const cat = getCat(tx.category_id);
+    const amt = parseFloat(tx.amount);
+    const isExpanded = expandedTxId === tx.id;
+    const isHovered = Platform.OS === 'windows' && hoveredTxId === tx.id;
+
+    return (
+      <Pressable
+        onPress={() => setExpandedTxId((current) => (current === tx.id ? null : tx.id))}
+        onHoverIn={Platform.OS === 'windows' ? () => setHoveredTxId(tx.id) : undefined}
+        onHoverOut={Platform.OS === 'windows' ? () => setHoveredTxId((current) => (current === tx.id ? null : current)) : undefined}
+        style={[styles.txCard, isHovered && styles.txCardHover, isExpanded && styles.txCardExpanded]}
+      >
+        <View style={styles.txRow}>
+          <View style={[styles.txIcon, { backgroundColor: `${cat?.color || colors.accent}20` }]}>
+            <Text style={{ fontSize: 20 }}>{cat?.icon || '📦'}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.txMerchant} numberOfLines={isExpanded ? undefined : 1}>{tx.merchant || 'Unnamed'}</Text>
+            <Text style={styles.txMeta}>{tx.date} • {cat?.name || 'Uncategorized'}</Text>
+          </View>
+          <View style={styles.txAmountWrap}>
+            <Text style={[styles.txAmt, { color: amt > 0 ? colors.success : colors.text }]}>
+              {amt > 0 ? '+' : ''}${Math.abs(amt).toFixed(2)}
+            </Text>
+            {isMobilePlatform() ? (
+              <Text style={styles.txExpandHint}>{isExpanded ? 'Tap to collapse' : 'Tap to expand'}</Text>
+            ) : null}
+          </View>
+        </View>
+
+        {isExpanded && (
+          <View style={styles.txExpandedContent}>
+            <Text style={styles.txDescriptionLabel}>Description</Text>
+            <Text style={styles.txDescriptionText}>
+              {tx.note?.trim() || 'No description provided for this transaction.'}
+            </Text>
+            <View style={styles.txActionRow}>
+              <Btn
+                size="sm"
+                variant="outline"
+                style={styles.txActionButton}
+                onPress={() => {
+                  setEditTx(tx);
+                  setForm({ date: tx.date, merchant: tx.merchant || '', amount: String(tx.amount), category_id: tx.category_id || '', note: tx.note || '' });
+                  setShowAdd(true);
+                }}
+              >
+                Edit
+              </Btn>
+              <Btn
+                size="sm"
+                variant="danger"
+                style={styles.txActionButton}
+                onPress={() => handleDelete(tx.id)}
+              >
+                Delete
+              </Btn>
+            </View>
+          </View>
+        )}
+      </Pressable>
+    );
+  };
+
+  const renderSectionHeader = ({ section }) => (
+    <View style={styles.transactionSectionHeader}>
+      <Text style={styles.transactionSectionTitle}>{section.title}</Text>
+    </View>
+  );
 
   return (
     <View style={styles.screen}>
@@ -430,61 +793,62 @@ export function TransactionsScreen({ profile }) {
         <Text style={styles.toolbarSectionTitle}>Filter History</Text>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={Platform.OS !== 'windows'} style={styles.filterRow} contentContainerStyle={styles.filterRowContent}>
-        <TouchableOpacity onPress={() => setFilterCat('')} style={[styles.filterPill, !filterCat && styles.filterPillActive]}>
-          <Text style={[styles.filterPillText, !filterCat && { color: '#fff' }]}>All</Text>
-        </TouchableOpacity>
+        <SelectablePill
+          label="All"
+          active={!filterCat}
+          onPress={() => setFilterCat('')}
+        />
         {categories.map(c => (
-          <TouchableOpacity key={c.id} onPress={() => setFilterCat(filterCat === c.id ? '' : c.id)} style={[styles.filterPill, filterCat === c.id && { backgroundColor: c.color }]}>
-            <Text style={[styles.filterPillText, filterCat === c.id && { color: '#fff' }]}>{c.icon} {c.name}</Text>
-          </TouchableOpacity>
+          <SelectablePill
+            key={c.id}
+            label={`${c.icon} ${c.name}`}
+            active={filterCat === c.id}
+            activeStyle={{ backgroundColor: c.color, borderColor: c.color }}
+            onPress={() => setFilterCat(filterCat === c.id ? '' : c.id)}
+          />
         ))}
       </ScrollView>
 
       {/* List */}
+      <View style={styles.transactionListSection}>
       {transactions.length === 0 ? (
         <View style={styles.emptyState}>
           <Text style={{ fontSize: 48, marginBottom: 8 }}>💳</Text>
           <Text style={styles.emptyText}>No transactions yet.{'\n'}Import CSV or add manually.</Text>
         </View>
       ) : (
-        <FlatList
-          data={transactions}
+        <SectionList
+          style={styles.transactionList}
+          sections={transactionSections}
           keyExtractor={t => t.id}
-          renderItem={renderTx}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 20 }}
+          renderItem={renderExpandableTx}
+          extraData={expandedTxId}
+          renderSectionHeader={renderSectionHeader}
+          stickySectionHeadersEnabled={false}
+          contentContainerStyle={styles.transactionListContent}
           ItemSeparatorComponent={() => <View style={styles.divider} />}
         />
       )}
+      </View>
 
       {/* Add/Edit Sheet */}
       <BottomSheet
         visible={showAdd}
         title={editTx ? 'Edit Transaction' : 'Add Transaction'}
-        onClose={() => { setShowAdd(false); setEditTx(null); setForm({ date: new Date().toISOString().slice(0, 10), merchant: '', amount: '', category_id: '', note: '' }); }}
+        onClose={() => { setShowAdd(false); setEditTx(null); setForm(createEmptyTransactionForm()); }}
         footer={
           <View style={{ flexDirection: 'column', gap: 10 }}>
             <Btn onPress={handleSave} fullWidth>{editTx ? 'Update' : 'Save'}</Btn>
-            <Btn variant="ghost" onPress={() => { setShowAdd(false); setEditTx(null); setForm({ date: new Date().toISOString().slice(0, 10), merchant: '', amount: '', category_id: '', note: '' }); }} fullWidth>Cancel</Btn>
+            <Btn variant="ghost" onPress={() => { setShowAdd(false); setEditTx(null); setForm(createEmptyTransactionForm()); }} fullWidth>Cancel</Btn>
           </View>
         }
       >
-        <Input label="Date (YYYY-MM-DD)" value={form.date} onChangeText={v => setForm(f => ({ ...f, date: v }))} placeholder="2025-01-15" />
-        <Input label="Merchant" value={form.merchant} onChangeText={v => setForm(f => ({ ...f, merchant: v }))} placeholder="e.g. Starbucks" />
-        <Input label="Amount (negative = expense)" value={form.amount} onChangeText={v => setForm(f => ({ ...f, amount: v }))} placeholder="-12.50" keyboardType="numeric" />
-        <Text style={styles.inputLabel}>Category</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={Platform.OS !== 'windows'} style={styles.sheetChipScroll} contentContainerStyle={styles.sheetChipScrollContent}>
-          {categories.map(c => (
-            <TouchableOpacity key={c.id} onPress={() => setForm(f => ({ ...f, category_id: c.id }))} style={[styles.filterPill, form.category_id === c.id && { backgroundColor: c.color }]}>
-              <Text style={[styles.filterPillText, form.category_id === c.id && { color: '#fff' }]}>{c.icon} {c.name}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-        <Input label="Note (optional)" value={form.note} onChangeText={v => setForm(f => ({ ...f, note: v }))} placeholder="Optional note" />
+        <TransactionFormFields form={form} setForm={setForm} categories={categories} />
       </BottomSheet>
 
       {/* CSV Import Sheet */}
       {showImport && <CSVImportSheet profile={profile} onClose={() => { setShowImport(false); load(); }} />}
-      {showOcrImport && <OCRImportSheet profile={profile} onClose={() => { setShowOcrImport(false); load(); }} />}
+      {showOcrImport && <OCRScanReviewSheet profile={profile} categories={categories} onClose={() => { setShowOcrImport(false); load(); }} />}
     </View>
   );
 }
@@ -565,13 +929,18 @@ function CSVImportSheet({ profile, onClose }) {
             <View key={field} style={{ marginBottom: 12 }}>
               <Text style={styles.inputLabel}>{field.toUpperCase()}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                <TouchableOpacity onPress={() => setMapping(m => ({ ...m, [field]: '' }))} style={[styles.filterPill, !mapping[field] && styles.filterPillActive]}>
-                  <Text style={[styles.filterPillText, !mapping[field] && { color: '#fff' }]}>— skip —</Text>
-                </TouchableOpacity>
+                <SelectablePill
+                  label="— skip —"
+                  active={!mapping[field]}
+                  onPress={() => setMapping(m => ({ ...m, [field]: '' }))}
+                />
                 {csvData.headers.map(h => (
-                  <TouchableOpacity key={h} onPress={() => setMapping(m => ({ ...m, [field]: h }))} style={[styles.filterPill, mapping[field] === h && styles.filterPillActive]}>
-                    <Text style={[styles.filterPillText, mapping[field] === h && { color: '#fff' }]}>{h}</Text>
-                  </TouchableOpacity>
+                  <SelectablePill
+                    key={h}
+                    label={h}
+                    active={mapping[field] === h}
+                    onPress={() => setMapping(m => ({ ...m, [field]: h }))}
+                  />
                 ))}
               </ScrollView>
             </View>
@@ -668,6 +1037,194 @@ function OCRImportSheet({ profile, onClose }) {
   );
 }
 
+function OCRScanReviewSheet({ profile, categories, onClose }) {
+  const [ocrText, setOcrText] = useState('');
+  const [drafts, setDrafts] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [savedCount, setSavedCount] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [scanResult, setScanResult] = useState(null);
+
+  const currentDraft = drafts[currentIndex] || null;
+
+  const buildDrafts = useCallback((rows, nextScanResult = null) => {
+    setDrafts(
+      rows.map((row) => ({
+        date: row.date || getTodayIsoDate(),
+        merchant: row.merchant || '',
+        amount: String(row.amount ?? ''),
+        category_id: row.category_id || '',
+        note: row.note || '',
+        source: nextScanResult?.mode === 'camera' ? 'ocr-camera' : 'ocr-image',
+      }))
+    );
+    setCurrentIndex(0);
+    if (nextScanResult) {
+      setScanResult(nextScanResult);
+      setOcrText(nextScanResult.text || '');
+    }
+  }, []);
+
+  const analyzeText = useCallback((text, nextScanResult = null) => {
+    const parsed = ImportIntegrationService.parseOCRText(text);
+    if (parsed.error) {
+      Alert.alert('Scan not recognized', parsed.error);
+      return false;
+    }
+
+    buildDrafts(parsed.rows, nextScanResult);
+    return true;
+  }, [buildDrafts]);
+
+  const startScan = async (mode) => {
+    if (loading) return;
+    setLoading(true);
+    try {
+      const nextScanResult = await scanTransactionImageAsync(mode);
+      if (!nextScanResult) return;
+      if (!String(nextScanResult.text || '').trim()) {
+        Alert.alert('No text found', 'No readable text was detected in that image. Try a clearer photo or a tighter crop.');
+        setScanResult(nextScanResult);
+        return;
+      }
+      analyzeText(nextScanResult.text, nextScanResult);
+    } catch (error) {
+      Alert.alert('Scan unavailable', error.message || 'Unable to scan that image on this device.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const setCurrentDraft = useCallback((updater) => {
+    setDrafts((existing) => existing.map((draft, index) => {
+      if (index !== currentIndex) return draft;
+      return typeof updater === 'function' ? updater(draft) : updater;
+    }));
+  }, [currentIndex]);
+
+  const removeCurrentDraft = useCallback(() => {
+    setDrafts((existing) => {
+      const nextDrafts = existing.filter((_, index) => index !== currentIndex);
+      setCurrentIndex((index) => Math.max(0, Math.min(index, nextDrafts.length - 1)));
+      return nextDrafts;
+    });
+  }, [currentIndex]);
+
+  const saveCurrentDraft = async () => {
+    if (!currentDraft || loading) return;
+
+    const validation = validateTransactionForm(currentDraft);
+    if (validation.title) {
+      Alert.alert(validation.title, validation.message);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await FinancialDataService.addTransaction(profile.id, {
+        ...currentDraft,
+        amount: validation.parsedAmount,
+        source: currentDraft.source || 'ocr',
+      });
+      setSavedCount((count) => count + 1);
+      removeCurrentDraft();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const scanFooter = currentDraft ? (
+    <View style={{ flexDirection: 'column', gap: 10 }}>
+      {drafts.length > 1 && (
+        <View style={styles.scanStepperRow}>
+          <Btn
+            variant="outline"
+            onPress={() => setCurrentIndex((index) => Math.max(0, index - 1))}
+            disabled={currentIndex === 0 || loading}
+            style={styles.scanStepperButton}
+          >
+            Previous
+          </Btn>
+          <Btn
+            variant="outline"
+            onPress={() => setCurrentIndex((index) => Math.min(drafts.length - 1, index + 1))}
+            disabled={currentIndex === drafts.length - 1 || loading}
+            style={styles.scanStepperButton}
+          >
+            Next
+          </Btn>
+        </View>
+      )}
+      <Btn onPress={saveCurrentDraft} fullWidth disabled={loading}>{loading ? 'Saving...' : 'Accept And Add Transaction'}</Btn>
+      <Btn variant="ghost" onPress={removeCurrentDraft} fullWidth disabled={loading}>Skip This Detection</Btn>
+    </View>
+  ) : null;
+
+  return (
+    <BottomSheet visible title="Scan Transaction" onClose={onClose} footer={scanFooter}>
+      {!currentDraft && savedCount === 0 && (
+        <View>
+          <Text style={styles.mapHint}>Choose a receipt, statement screenshot, or bank image. Mobile opens your camera roll by default, and both mobile and Windows can also take a photo first.</Text>
+          <View style={styles.scanActionColumn}>
+            <Btn onPress={() => startScan('library')} fullWidth disabled={loading}>{loading ? 'Scanning...' : 'Choose Image'}</Btn>
+            <Btn variant="outline" onPress={() => startScan('camera')} fullWidth disabled={loading}>{loading ? 'Scanning...' : 'Take Photo'}</Btn>
+          </View>
+          <Text style={styles.importHint}>If OCR already ran elsewhere, you can paste the raw text below and review it in the same transaction form.</Text>
+          <TextInput
+            value={ocrText}
+            onChangeText={setOcrText}
+            multiline
+            placeholder={'04/20/2026 STARBUCKS 6.75\n04/21/2026 PAYROLL DEPOSIT 1200.00'}
+            placeholderTextColor={colors.textMuted}
+            style={styles.ocrInput}
+          />
+          <Btn onPress={() => analyzeText(ocrText)} fullWidth disabled={loading || !ocrText.trim()}>Use Pasted OCR Text</Btn>
+        </View>
+      )}
+
+      {!!currentDraft && (
+        <View style={{ gap: 14 }}>
+          <View style={styles.scanHeaderRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.toolbarSectionTitle}>Review Scanned Transaction</Text>
+              <Text style={styles.importHint}>
+                Detection {currentIndex + 1} of {drafts.length}. Edit anything before accepting it into your transaction history.
+              </Text>
+            </View>
+            {!!scanResult?.mode && (
+              <View style={styles.scanModeBadge}>
+                <Text style={styles.scanModeBadgeText}>{scanResult.mode === 'camera' ? 'Camera' : 'Library'}</Text>
+              </View>
+            )}
+          </View>
+
+          {!!scanResult?.imageUri && (
+            <Image source={{ uri: scanResult.imageUri }} style={styles.scanPreviewImage} resizeMode="cover" />
+          )}
+
+          <TransactionFormFields form={currentDraft} setForm={setCurrentDraft} categories={categories} />
+
+          {!!ocrText.trim() && (
+            <View style={styles.ocrPreviewCard}>
+              <Text style={styles.inputLabel}>Detected OCR Text</Text>
+              <Text style={styles.scanPreviewText} numberOfLines={8}>{ocrText}</Text>
+            </View>
+          )}
+        </View>
+      )}
+
+      {!currentDraft && savedCount > 0 && (
+        <View style={styles.doneState}>
+          <Text style={{ fontSize: 48 }}>âœ…</Text>
+          <Text style={styles.doneTitle}>Scan Review Complete</Text>
+          <Text style={{ color: colors.success, marginTop: 8 }}>{savedCount} transaction{savedCount === 1 ? '' : 's'} added</Text>
+          <Btn onPress={onClose} style={{ marginTop: 20 }} fullWidth>Done</Btn>
+        </View>
+      )}
+    </BottomSheet>
+  );
+}
+
 // ─────────────────────────────────────────────
 // Budget Manager Screen
 // ─────────────────────────────────────────────
@@ -676,7 +1233,10 @@ export function BudgetManagerScreen({ profile }) {
   const [budgets,    setBudgets]    = useState([]);
   const [categories, setCategories] = useState([]);
   const [showAdd,    setShowAdd]    = useState(false);
-  const [form,       setForm]       = useState({ category_id: '', limit: '' });
+  const [form,       setForm]       = useState({ category_id: '', limit: '', description: '' });
+  const [editBudget, setEditBudget] = useState(null);
+  const [expandedBudgetId, setExpandedBudgetId] = useState(null);
+  const [hoveredBudgetId, setHoveredBudgetId] = useState(null);
   const [saving,     setSaving]     = useState(false);
   const now   = new Date();
   const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -692,6 +1252,16 @@ export function BudgetManagerScreen({ profile }) {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => subscribeToDataChanges(load), [load]);
+  useEffect(() => {
+    if (expandedBudgetId && !budgets.some((budget) => budget.id === expandedBudgetId)) {
+      setExpandedBudgetId(null);
+    }
+  }, [budgets, expandedBudgetId]);
+  useEffect(() => {
+    if (hoveredBudgetId && !budgets.some((budget) => budget.id === hoveredBudgetId)) {
+      setHoveredBudgetId(null);
+    }
+  }, [budgets, hoveredBudgetId]);
 
   const handleSave = async () => {
     const parsedLimit = parseFloat(form.limit);
@@ -706,10 +1276,19 @@ export function BudgetManagerScreen({ profile }) {
 
     setSaving(true);
     setShowAdd(false);
-    setForm({ category_id: '', limit: '' });
+    setForm({ category_id: '', limit: '', description: '' });
+    setEditBudget(null);
 
     try {
-      await BudgetingGoalService.setBudget(profile.id, form.category_id, month, year, parsedLimit);
+      if (editBudget) {
+        await BudgetingGoalService.updateBudget(editBudget.id, {
+          categoryId: form.category_id,
+          limitAmount: parsedLimit,
+          description: form.description.trim(),
+        });
+      } else {
+        await BudgetingGoalService.setBudget(profile.id, form.category_id, month, year, parsedLimit, form.description.trim());
+      }
       await load();
     } catch (error) {
       console.warn('Failed to save budget:', error);
@@ -726,11 +1305,21 @@ export function BudgetManagerScreen({ profile }) {
     ]);
   };
 
+  const openBudgetEditor = (budget = null) => {
+    setEditBudget(budget);
+    setForm({
+      category_id: budget?.category_id || '',
+      limit: budget ? String(budget.limit_amount) : '',
+      description: budget?.description || '',
+    });
+    setShowAdd(true);
+  };
+
   return (
     <View style={styles.screen}>
       <View style={styles.screenHeaderRow}>
         <Text style={styles.screenTitle}>Budget Manager</Text>
-        <Btn size="sm" onPress={() => setShowAdd(true)}>+ Budget</Btn>
+        <Btn size="sm" onPress={() => openBudgetEditor()}>+ Budget</Btn>
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 20 }}>
@@ -743,8 +1332,16 @@ export function BudgetManagerScreen({ profile }) {
           const cat  = categories.find(c => c.id === b.category_id);
           const pct  = Math.min(100, b.progress * 100);
           const over = b.spent > b.limit_amount;
+          const isExpanded = expandedBudgetId === b.id;
+          const isHovered = Platform.OS === 'windows' && hoveredBudgetId === b.id;
           return (
-            <Card key={b.id} style={{ marginBottom: 14 }}>
+            <Pressable
+              key={b.id}
+              onPress={() => setExpandedBudgetId((current) => (current === b.id ? null : b.id))}
+              onHoverIn={Platform.OS === 'windows' ? () => setHoveredBudgetId(b.id) : undefined}
+              onHoverOut={Platform.OS === 'windows' ? () => setHoveredBudgetId((current) => (current === b.id ? null : current)) : undefined}
+              style={[styles.txCard, styles.budgetCard, isHovered && styles.txCardHover, isExpanded && styles.txCardExpanded]}
+            >
               <View style={styles.budgetCardHeader}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                   <View style={[styles.catIcon, { backgroundColor: `${cat?.color || colors.accent}20` }]}>
@@ -757,41 +1354,77 @@ export function BudgetManagerScreen({ profile }) {
                     </Text>
                   </View>
                 </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={styles.txAmountWrap}>
                   <Badge color={over ? colors.danger : pct > 80 ? colors.warning : colors.success}>{Math.round(pct)}%</Badge>
-                  <TouchableOpacity onPress={() => handleDelete(b.id)}><Text style={{ fontSize: 16 }}>🗑️</Text></TouchableOpacity>
+                  {isMobilePlatform() ? (
+                    <Text style={styles.txExpandHint}>{isExpanded ? 'Tap to collapse' : 'Tap to expand'}</Text>
+                  ) : null}
                 </View>
               </View>
               <ProgressBar value={b.spent} max={b.limit_amount} color={cat?.color || colors.accent} />
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+              <View style={styles.budgetMetricsRow}>
                 <Text style={styles.txMeta}>Spent: <Text style={{ color: colors.text }}>${b.spent.toFixed(0)}</Text></Text>
                 <Text style={styles.txMeta}>Limit: <Text style={{ color: colors.text }}>${b.limit_amount.toFixed(0)}</Text></Text>
               </View>
-            </Card>
+              {isExpanded && (
+                <View style={styles.txExpandedContent}>
+                  <Text style={styles.txDescriptionLabel}>Description</Text>
+                  <Text style={styles.txDescriptionText}>
+                    {b.description?.trim() || 'No description provided for this budget.'}
+                  </Text>
+                  <View style={styles.txActionRow}>
+                    <Btn size="sm" variant="outline" style={styles.txActionButton} onPress={() => openBudgetEditor(b)}>Edit</Btn>
+                    <Btn size="sm" variant="danger" style={styles.txActionButton} onPress={() => handleDelete(b.id)}>Delete</Btn>
+                  </View>
+                </View>
+              )}
+            </Pressable>
           );
         })}
       </ScrollView>
 
       <BottomSheet
         visible={showAdd}
-        title="Set Budget"
-        onClose={() => { if (!saving) setShowAdd(false); }}
+        title={editBudget ? 'Edit Budget' : 'Set Budget'}
+        onClose={() => {
+          if (!saving) {
+            setShowAdd(false);
+            setEditBudget(null);
+            setForm({ category_id: '', limit: '', description: '' });
+          }
+        }}
         footer={
           <View style={{ flexDirection: 'column', gap: 10 }}>
-            <Btn onPress={handleSave} disabled={saving || !form.category_id || !form.limit} fullWidth>{saving ? 'Saving...' : 'Save Budget'}</Btn>
-            <Btn variant="ghost" onPress={() => setShowAdd(false)} disabled={saving} fullWidth>Cancel</Btn>
+            <Btn onPress={handleSave} disabled={saving || !form.category_id || !form.limit} fullWidth>{saving ? 'Saving...' : editBudget ? 'Update Budget' : 'Save Budget'}</Btn>
+            <Btn
+              variant="ghost"
+              onPress={() => {
+                setShowAdd(false);
+                setEditBudget(null);
+                setForm({ category_id: '', limit: '', description: '' });
+              }}
+              disabled={saving}
+              fullWidth
+            >
+              Cancel
+            </Btn>
           </View>
         }
       >
         <Text style={styles.inputLabel}>Category</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={Platform.OS !== 'windows'} style={styles.sheetChipScroll} contentContainerStyle={styles.sheetChipScrollContent}>
           {categories.map(c => (
-            <TouchableOpacity key={c.id} onPress={() => setForm(f => ({ ...f, category_id: c.id }))} style={[styles.filterPill, form.category_id === c.id && { backgroundColor: c.color }]}>
-              <Text style={[styles.filterPillText, form.category_id === c.id && { color: '#fff' }]}>{c.icon} {c.name}</Text>
-            </TouchableOpacity>
+            <SelectablePill
+              key={c.id}
+              label={`${c.icon} ${c.name}`}
+              active={form.category_id === c.id}
+              activeStyle={{ backgroundColor: c.color, borderColor: c.color }}
+              onPress={() => setForm(f => ({ ...f, category_id: c.id }))}
+            />
           ))}
         </ScrollView>
         <Input label={`Monthly limit for ${now.toLocaleString('default', { month: 'long' })}`} value={form.limit} onChangeText={v => setForm(f => ({ ...f, limit: v }))} placeholder="500" keyboardType="numeric" icon="💰" />
+        <Input label="Description (optional)" value={form.description} onChangeText={v => setForm(f => ({ ...f, description: v }))} placeholder="Add context for this budget" multiline />
       </BottomSheet>
     </View>
   );
@@ -1084,7 +1717,7 @@ const styles = StyleSheet.create({
   screenContent:     { padding: spacing.lg, paddingBottom: 20 },
   screenHeaderRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, paddingTop: 8 },
   screenTitle:       { fontSize: font.sizes.xxl, fontWeight: font.weights.bold, color: colors.text },
-  toolbar:           { gap: 12, padding: 16, paddingBottom: 8 },
+  toolbar:           { gap: 12, padding: 16, paddingBottom: 8, flexShrink: 0 },
   toolbarSection:    { gap: 4 },
   toolbarSectionTitle: { fontSize: font.sizes.sm, fontWeight: font.weights.semibold, color: colors.text },
   toolbarSectionText: { fontSize: font.sizes.xs, color: colors.textMuted, lineHeight: 18 },
@@ -1093,23 +1726,40 @@ const styles = StyleSheet.create({
   searchBox:         { width: '100%', flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: 10 },
   searchIcon:        { fontSize: 14, marginRight: 6 },
   searchInput:       { flex: 1, color: colors.text, fontSize: font.sizes.md, paddingVertical: 10 },
-  filterSection:     { paddingHorizontal: 16, marginBottom: 8, gap: 4 },
-  filterRow:         { maxHeight: 48, marginBottom: 4 },
+  filterSection:     { paddingHorizontal: 16, marginBottom: 8, gap: 4, flexShrink: 0 },
+  filterRow:         { maxHeight: 48, marginBottom: 4, flexGrow: 0, flexShrink: 0 },
   filterRowContent:  { paddingHorizontal: 16, gap: 8, paddingBottom: Platform.OS === 'windows' ? 12 : 0, paddingRight: Platform.OS === 'windows' ? 12 : 0 },
   sheetChipScroll:   { marginBottom: 16 },
   sheetChipScrollContent: { gap: 8, paddingBottom: Platform.OS === 'windows' ? 12 : 0, paddingRight: Platform.OS === 'windows' ? 12 : 0 },
-  filterPill:        { backgroundColor: colors.surfaceAlt, borderRadius: radius.full, paddingHorizontal: 12, minHeight: 34, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  filterPill:        { backgroundColor: colors.surfaceAlt, borderRadius: radius.full, paddingHorizontal: 12, minHeight: 34, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  filterPillHover:   { backgroundColor: colors.surface, borderColor: `${colors.accent}45` },
   filterPillActive:  { backgroundColor: colors.accent, borderColor: colors.accent },
   filterPillText:    { color: colors.textSecondary, fontSize: font.sizes.xs, fontWeight: font.weights.semibold, textAlignVertical: 'center', includeFontPadding: false },
+  filterPillTextActive: { color: '#fff' },
   inputLabel:        { fontSize: font.sizes.xs, color: colors.textMuted, fontWeight: font.weights.semibold, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
   input:             { backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingVertical: 12, paddingHorizontal: 14, color: colors.text, fontSize: font.sizes.md, marginBottom: 16 },
-  txRow:             { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
+  transactionListSection: { flex: 1, minHeight: 0 },
+  transactionList:   { flex: 1 },
+  transactionListContent: { paddingHorizontal: 16, paddingBottom: 20 },
+  transactionSectionHeader: { paddingTop: 16, paddingBottom: 8 },
+  transactionSectionTitle: { color: colors.textMuted, fontSize: font.sizes.xs, fontWeight: font.weights.semibold, textTransform: 'uppercase', letterSpacing: 0.5 },
+  txCard:            { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, padding: 14 },
+  txCardHover:       { backgroundColor: colors.surfaceAlt, borderColor: `${colors.accent}35` },
+  txCardExpanded:    { borderColor: `${colors.accent}55`, backgroundColor: colors.surfaceAlt },
+  txRow:             { flexDirection: 'row', alignItems: 'center', gap: 12 },
   txIcon:            { width: 40, height: 40, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   txMerchant:        { fontSize: font.sizes.md, fontWeight: font.weights.medium, color: colors.text },
   txMeta:            { fontSize: font.sizes.xs, color: colors.textMuted, marginTop: 2 },
+  txAmountWrap:      { alignItems: 'flex-end', marginLeft: 8 },
   txAmt:             { fontSize: font.sizes.md, fontWeight: font.weights.bold, color: colors.text, fontVariant: ['tabular-nums'] },
-  divider:           { height: 1, backgroundColor: colors.border },
-  emptyState:        { alignItems: 'center', paddingVertical: 60 },
+  txExpandHint:      { fontSize: font.sizes.xs, color: colors.textMuted, marginTop: 4 },
+  txExpandedContent: { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: colors.border, gap: 10 },
+  txDescriptionLabel:{ fontSize: font.sizes.xs, color: colors.textMuted, fontWeight: font.weights.semibold, textTransform: 'uppercase', letterSpacing: 0.5 },
+  txDescriptionText: { fontSize: font.sizes.sm, color: colors.textSecondary, lineHeight: 20 },
+  txActionRow:       { flexDirection: 'row', gap: 10, marginTop: 4 },
+  txActionButton:    { flex: 1 },
+  divider:           { height: 10 },
+  emptyState:        { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60, paddingHorizontal: 16 },
   emptyText:         { color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
   authContainer:     { flex: 1, backgroundColor: colors.bg },
   authScroll:        { padding: 24, justifyContent: 'center', minHeight: '100%' },
@@ -1127,11 +1777,36 @@ const styles = StyleSheet.create({
   dashHeader:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
   greeting:          { color: colors.textMuted, fontSize: font.sizes.sm },
   monthBadge:        { backgroundColor: `${colors.accent}15`, borderWidth: 1, borderColor: `${colors.accent}40`, borderRadius: radius.md, paddingHorizontal: 12, paddingVertical: 6 },
-  heroCard:          { background: colors.surface, marginBottom: 16, borderColor: `${colors.accent}40` },
+  heroCard:          { backgroundColor: colors.surface, marginBottom: 16, borderColor: `${colors.accent}40` },
   heroLabel:         { color: colors.textMuted, fontSize: font.sizes.xs, fontWeight: font.weights.semibold, letterSpacing: 0.5, marginBottom: 4 },
+  heroSubLabel:      { color: colors.textSecondary, fontSize: font.sizes.xs, lineHeight: 18, marginTop: 2 },
+  heroHeaderRow:     { flexDirection: 'row', justifyContent: 'space-between', gap: 12, marginBottom: 14 },
+  heroToggle:        { flexDirection: 'row', alignSelf: 'flex-start', backgroundColor: colors.surfaceAlt, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, padding: 4, gap: 4 },
+  heroToggleChip:    { paddingHorizontal: 12, paddingVertical: 7, borderRadius: radius.full },
+  heroToggleChipActive: { backgroundColor: colors.accent },
+  heroToggleText:    { color: colors.textSecondary, fontSize: font.sizes.xs, fontWeight: font.weights.semibold },
+  heroToggleTextActive: { color: colors.text },
+  heroAmountRow:     { flexDirection: 'row', alignItems: 'flex-end', gap: 12, marginBottom: 18 },
   heroAmount:        { fontSize: 34, fontWeight: font.weights.bold, color: colors.text },
+  heroStatsRow:      { flexDirection: 'row', justifyContent: 'space-between', gap: 16, marginTop: 18 },
   statLabel:         { color: colors.textMuted, fontSize: font.sizes.xs },
   statValue:         { color: colors.text, fontWeight: font.weights.semibold, marginTop: 2 },
+  chartWrap:         { marginTop: 2 },
+  chartArea:         { position: 'relative', height: 188 },
+  chartGridLine:     { position: 'absolute', left: 0, right: 0, flexDirection: 'row', alignItems: 'center' },
+  chartGridLabel:    { width: 42, color: colors.textMuted, fontSize: 10 },
+  chartGridStroke:   { flex: 1, height: 1, backgroundColor: `${colors.textMuted}35` },
+  chartBarsRow:      { flexDirection: 'row', alignItems: 'flex-end', marginLeft: 48, gap: 10, height: 188, paddingTop: 12, paddingBottom: 1 },
+  chartColumn:       { flex: 1, alignItems: 'center' },
+  chartBarSlot:      { width: '100%', height: 176, justifyContent: 'flex-end', alignItems: 'center' },
+  chartBarPressable: { width: '100%', alignItems: 'center', justifyContent: 'flex-end', minHeight: 136 },
+  chartBar:          { width: '72%', maxWidth: 34, minWidth: 22, borderRadius: 10 },
+  chartMonthRow:     { flexDirection: 'row', marginLeft: 48, gap: 10, marginTop: 10 },
+  chartMonthColumn:  { flex: 1, alignItems: 'center' },
+  chartMonthLabel:   { color: colors.textSecondary, fontSize: font.sizes.xs },
+  chartTooltip:      { position: 'absolute', top: 0, minWidth: 96, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: `${colors.accent}55`, borderRadius: radius.md, paddingHorizontal: 10, paddingVertical: 8, alignItems: 'center', zIndex: 2 },
+  chartTooltipMonth: { color: colors.textMuted, fontSize: 10, marginBottom: 2, textAlign: 'center' },
+  chartTooltipValue: { color: colors.text, fontSize: font.sizes.sm, fontWeight: font.weights.bold },
   alertBox:          { backgroundColor: colors.dangerSoft, borderWidth: 1, borderColor: `${colors.danger}30`, borderRadius: radius.md, padding: 14, marginBottom: 16, flexDirection: 'row', gap: 10 },
   alertTitle:        { fontSize: font.sizes.sm, fontWeight: font.weights.bold, color: colors.danger },
   alertBody:         { fontSize: font.sizes.xs, color: colors.textSecondary, marginTop: 2 },
@@ -1160,6 +1835,8 @@ const styles = StyleSheet.create({
   forecastAmt:       { fontSize: font.sizes.xl, fontWeight: font.weights.bold, color: colors.text, marginTop: 4 },
   forecastConf:      { fontSize: font.sizes.xs, color: colors.textMuted, marginTop: 2 },
   budgetCardHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  budgetCard:        { marginBottom: 14 },
+  budgetMetricsRow:  { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, gap: 12 },
   dropZone:          { borderWidth: 2, borderColor: colors.border, borderStyle: 'dashed', borderRadius: radius.md, padding: 40, alignItems: 'center' },
   dropZoneText:      { color: colors.text, fontWeight: font.weights.semibold, fontSize: font.sizes.md },
   dropZoneSub:       { color: colors.textMuted, fontSize: font.sizes.sm, marginTop: 4 },
@@ -1167,6 +1844,14 @@ const styles = StyleSheet.create({
   importHint:        { color: colors.textMuted, fontSize: font.sizes.xs, marginTop: 10, lineHeight: 18 },
   ocrInput:          { minHeight: 180, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: 14, color: colors.text, fontSize: font.sizes.sm, marginBottom: 16, textAlignVertical: 'top' },
   ocrPreviewCard:    { backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: 12 },
+  scanActionColumn:  { gap: 10, marginBottom: 12 },
+  scanHeaderRow:     { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  scanModeBadge:     { backgroundColor: `${colors.accent}20`, borderWidth: 1, borderColor: `${colors.accent}40`, borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 6 },
+  scanModeBadgeText: { color: colors.accent, fontSize: font.sizes.xs, fontWeight: font.weights.semibold },
+  scanPreviewImage:  { width: '100%', height: 180, borderRadius: radius.lg, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border },
+  scanPreviewText:   { color: colors.textSecondary, fontSize: font.sizes.sm, lineHeight: 20 },
+  scanStepperRow:    { flexDirection: 'row', gap: 10 },
+  scanStepperButton: { flex: 1 },
   doneState:         { alignItems: 'center', paddingVertical: 20 },
   doneTitle:         { fontSize: font.sizes.xl, fontWeight: font.weights.bold, color: colors.text, marginTop: 12 },
   apiKeyBanner:      { backgroundColor: colors.surfaceAlt, padding: 16, borderBottomWidth: 1, borderColor: colors.border },
@@ -1193,3 +1878,5 @@ const styles = StyleSheet.create({
   statCell:          { alignItems: 'center' },
   statBig:           { fontSize: font.sizes.xxl, fontWeight: font.weights.bold, color: colors.text },
 });
+
+

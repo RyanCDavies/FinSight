@@ -62,6 +62,7 @@ async function initSchema(db) {
       month        TEXT NOT NULL,
       year         TEXT NOT NULL,
       limit_amount REAL NOT NULL,
+      description  TEXT DEFAULT '',
       created_at   TEXT NOT NULL,
       UNIQUE(profile_id, category_id, month, year)
     );
@@ -98,7 +99,16 @@ async function initSchema(db) {
     );
   `);
 
+  await ensureBudgetDescriptionColumn(db);
+
   await seedCategories(db);
+}
+
+async function ensureBudgetDescriptionColumn(db) {
+  const columns = await db.getAllAsync(`PRAGMA table_info('budgets')`);
+  if (!columns.some((column) => column.name === 'description')) {
+    await db.execAsync(`ALTER TABLE budgets ADD COLUMN description TEXT DEFAULT ''`);
+  }
 }
 
 const DEFAULT_CATEGORIES = [

@@ -23,6 +23,14 @@
       "expo-sqlite",
       "expo-secure-store",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow FinSight to access your photos so you can import receipt and transaction images.",
+          "cameraPermission": "Allow FinSight to use your camera so you can scan receipts and transaction images.",
+          "microphonePermission": false
+        }
+      ],
+      [
         "expo-document-picker",
         {
           "iCloudContainerEnvironment": "Production"

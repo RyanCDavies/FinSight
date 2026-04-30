@@ -4,7 +4,12 @@ const windowsCsvPicker =
   NativeModules.WindowsCsvPicker ||
   (typeof TurboModuleRegistry?.get === 'function' ? TurboModuleRegistry.get('WindowsCsvPicker') : null);
 
-const windowsCsvPickerEmitter = windowsCsvPicker ? new NativeEventEmitter(windowsCsvPicker) : null;
+const windowsCsvPickerEmitter =
+  windowsCsvPicker &&
+  typeof NativeEventEmitter === 'function' &&
+  typeof windowsCsvPicker.addListener === 'function'
+    ? new NativeEventEmitter(windowsCsvPicker)
+    : null;
 
 export async function pickCsvTextAsync() {
   if (!windowsCsvPicker?.pickCsvText) {

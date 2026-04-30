@@ -113,6 +113,7 @@
     <ClInclude Include="AppStorageModule.h" />
     <ClInclude Include="finsight.h" />
     <ClInclude Include="CsvPickerModule.h" />
+    <ClInclude Include="OcrScannerModule.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="AutolinkedNativeModules.g.h" />
     <ClInclude Include="pch.h" />
@@ -121,6 +122,7 @@
   <ItemGroup>
     <ClCompile Include="AppStorageModule.cpp" />
     <ClCompile Include="CsvPickerModule.cpp" />
+    <ClCompile Include="OcrScannerModule.cpp" />
     <ClCompile Include="finsight.cpp" />
     <ClCompile Include="AutolinkedNativeModules.g.cpp" />
     <ClCompile Include="pch.cpp">

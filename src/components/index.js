@@ -27,25 +27,36 @@ export function Btn({ children, onPress, variant = 'primary', size = 'md', disab
     danger:  { bg: colors.dangerSoft, text: colors.danger        },
     outline: { bg: 'transparent',     text: colors.accent        },
   }[variant];
+  const [hovered, setHovered] = React.useState(false);
+  const isWindows = Platform.OS === 'windows';
+  const hoverStyle = isWindows && !disabled ? {
+    primary: { opacity: 0.92 },
+    ghost:   { backgroundColor: colors.surfaceAlt },
+    danger:  { backgroundColor: `${colors.danger}22`, borderColor: `${colors.danger}55` },
+    outline: { backgroundColor: `${colors.accent}14`, borderColor: `${colors.accent}70` },
+  }[variant] : null;
 
   return (
-    <TouchableOpacity
+    <Pressable
       onPress={!disabled ? onPress : undefined}
-      activeOpacity={0.75}
-      style={[
+      onHoverIn={isWindows && !disabled ? () => setHovered(true) : undefined}
+      onHoverOut={isWindows ? () => setHovered(false) : undefined}
+      style={({ pressed }) => ([
         styles.btn,
         { backgroundColor: variantStyle.bg, paddingVertical: size === 'sm' ? 8 : 13, paddingHorizontal: size === 'sm' ? 14 : 20 },
         variant === 'outline' && { borderWidth: 1, borderColor: `${colors.accent}50` },
         variant === 'danger'  && { borderWidth: 1, borderColor: `${colors.danger}30` },
+        hovered && hoverStyle,
+        pressed && !disabled && styles.btnPressed,
         fullWidth && { width: '100%' },
         disabled && { opacity: 0.45 },
         style,
-      ]}
+      ])}
     >
       <Text style={[styles.btnText, { color: variantStyle.text, fontSize: size === 'sm' ? font.sizes.sm : font.sizes.md }]}>
         {children}
       </Text>
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
@@ -210,6 +221,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexDirection:  'row',
     gap:            6,
+  },
+  btnPressed: {
+    opacity: 0.82,
   },
   btnText: {
     fontWeight: font.weights.bold,
