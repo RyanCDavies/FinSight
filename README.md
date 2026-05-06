@@ -1,66 +1,72 @@
 # FinSight
 
-FinSight is an Expo-based React Native app with a native Windows desktop target powered by `react-native-windows`.
+FinSight is a cross-platform personal finance application built with Expo and React Native, with a native Windows desktop target powered by `react-native-windows`. The project helps users track transactions, manage budgets, review spending trends, import financial data, and interact with a privacy-focused local AI assistant.
 
-This README documents the current development environment required to install dependencies and run the project as it exists in this repository.
+This repository is prepared for final course submission and includes the application source, Windows desktop implementation, and supporting project documentation.
 
-## Stack
+## Features
+
+- User registration and sign-in with local session persistence
+- Dashboard with spending, income, and cash-flow summaries
+- Transaction management with categorized records
+- Budget planning and progress tracking
+- CSV transaction import workflow
+- Receipt/image OCR scanning workflow for transaction capture
+- Profile management
+- AI assistant experience for finance-related questions
+- Optional Windows local LLM runtime scaffold for private on-device AI
+
+## Tech Stack
 
 - Expo SDK `54`
 - React `19.1.0`
 - React Native `0.81.5`
 - React Native Windows `0.81.x`
-- Native Windows modules implemented in C++
+- SQLite-backed local storage
+- Native Windows modules in C++
 
-## Development Targets
+## Repository Contents
 
-This repo currently supports two development flows:
+- [App.js](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/App.js): application entry point and navigation shell
+- [src](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/src): app screens, services, database helpers, platform integrations, and AI runtime code
+- [assets](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/assets): icons and bundled visual assets
+- [windows](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/windows): native Windows solution and C++ bridge modules
+- [documentation](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/documentation): project documentation and supporting deliverables
 
-- Mobile development through Expo (`android`, `ios`, `start`)
-- Windows desktop development through React Native Windows (`start:windows`, `windows`, `dev:windows`)
+## Included Documentation
 
-Because the app includes native modules and a native Windows host, this is not a plain Expo Go-only project anymore.
+The [documentation](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/documentation) folder contains project artifacts used during development and submission, including:
 
-## Required Software
+- [index.html](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/documentation/index.html)
+- [storyboard.html](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/documentation/storyboard.html)
+- [FinSight_SRS.docx](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/documentation/FinSight_SRS.docx)
+- [FinSight Business Plan.docx](</C:/Users/krank/Documents/CPP Classes/4800/finsight-expo/documentation/FinSight Business Plan.docx>)
+- [Windows_Local_LLM_Runtime.md](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/documentation/Windows_Local_LLM_Runtime.md)
 
-### All developers
+## Installation
 
-Install these first:
+### Requirements
+
+Install the following before running the project:
 
 - Node.js `20 LTS` or newer
-- `npm` (ships with Node.js)
+- `npm`
 - Git
 
-Recommended check:
-
-```powershell
-node -v
-npm -v
-git --version
-```
-
-### Windows desktop developers
-
-If you plan to run or build the Windows app, install:
+For the Windows desktop target, also install:
 
 - Windows 10 or Windows 11
 - Visual Studio 2022
 - MSVC v143 C++ build tools
-- Windows 10/11 SDK
+- Windows SDK
 - NuGet support in Visual Studio
 
-In Visual Studio Installer, the safest baseline is:
+Recommended Visual Studio workloads:
 
 - `Desktop development with C++`
-- `Universal Windows Platform development` if prompted by your local RNW toolchain
+- `Universal Windows Platform development` if required by your local RNW setup
 
-This project's Windows solution targets:
-
-- Visual Studio 2022 (`MinimumVisualStudioVersion` `17.0`)
-- Platform toolset `v143`
-- Windows SDK `10.0.22621.x` in the generated build metadata
-
-## Clone And Install
+### Setup
 
 ```powershell
 git clone <your-repo-url>
@@ -68,47 +74,37 @@ cd finsight-expo
 npm install
 ```
 
-Notes:
+This repository uses `package-lock.json`, so `npm` is the expected package manager.
 
-- Use `npm install` from the project root. Do not install `expo-cli` globally for this repo.
-- `node_modules` must exist before any Windows native build can succeed.
-- The repo already includes `package-lock.json`, so `npm` is the expected package manager.
+## Running The App
 
-## Run The App
-
-### Mobile / Expo
-
-Start the Expo development server:
+### Expo / mobile workflow
 
 ```powershell
 npm start
 ```
 
-Platform shortcuts:
+Optional platform commands:
 
 ```powershell
 npm run android
 npm run ios
 ```
 
-Important:
+Notes:
 
-- `iOS` requires macOS for the native simulator workflow.
-- This project uses native capabilities, so if a feature depends on platform-native code it may not behave the same in Expo Go as it would in a full native build.
-- Receipt scanning on Expo mobile is on-device, but it needs a native Expo development/custom build so the OCR module is bundled. Expo Go alone will not include the scanner.
+- `iOS` simulator workflows require macOS.
+- Some native-powered features are best tested in a development/custom build rather than Expo Go alone.
 
-### Windows desktop
+### Windows desktop workflow
 
-For the normal Windows development flow, use:
+Recommended command:
 
 ```powershell
 npm run dev:windows
 ```
 
-That script:
-
-- starts the Metro server with the Windows config on port `8081`
-- launches the native Windows app with `react-native run-windows --no-packager`
+This starts the Windows Metro configuration and launches the native Windows app.
 
 If you want to run each step separately:
 
@@ -133,85 +129,28 @@ npm run msbuild:windows:solution
 npm run test:windows:native
 ```
 
-What they do:
+## Windows Build Notes
 
-- `npm start`: starts Expo Metro
-- `npm run android`: opens the Expo Android target
-- `npm run ios`: opens the Expo iOS target
-- `npm run start:windows`: starts Metro using `metro.config.windows.js`
-- `npm run windows`: builds and launches the Windows app without starting Metro
-- `npm run dev:windows`: starts Metro and launches the Windows app together
-- `npm run test:windows`: runs Jest with the Windows-specific config
-- `npm run msbuild:windows`: restores and builds the native Windows app project with MSBuild in `Debug|x64`
-- `npm run msbuild:windows:release`: restores and builds the native Windows app project with MSBuild in `Release|x64`
-- `npm run msbuild:windows:solution`: restores and builds the full Windows solution, including the packaging project
-- `npm run test:windows:native`: native Windows build verification through MSBuild for testing setup
-
-## Windows-Specific Notes
-
-- The Windows app lives under [windows](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/windows).
-- The native Visual Studio solution is [windows/finsight.sln](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/windows/finsight.sln).
+- The Windows solution is [windows/finsight.sln](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/windows/finsight.sln).
 - NuGet sources are configured in [NuGet.config](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/NuGet.config).
-- The Windows target uses custom native modules in [windows/finsight](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/windows/finsight).
+- Native Windows implementation files live under [windows/finsight](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/windows/finsight).
 
-If the Windows build fails early, check these first:
+If a Windows build fails, verify:
 
 - Visual Studio 2022 is installed
-- the C++ workload is installed
+- C++ build tools are installed
 - the Windows SDK is installed
 - `npm install` completed successfully
-- NuGet package restore is allowed from the configured feeds
+- NuGet restore is allowed from configured feeds
 
-### Using MSBuild directly
+## Local AI Note
 
-This repo now includes a helper script at [scripts/invoke-msbuild.js](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/scripts/invoke-msbuild.js) that:
+FinSight includes a Windows-native local AI scaffold intended for private, on-device assistant functionality. The current implementation supports local model configuration and Windows integration work, but a full ONNX Runtime GenAI setup is still required for complete local model execution.
 
-- locates `MSBuild.exe` automatically from standard Visual Studio install paths, or from `MSBUILD_EXE` if you set it explicitly
-- sanitizes the environment before launching `msbuild` so duplicate `Path`/`PATH` entries do not break the C++ toolchain
-- restores NuGet packages
-- builds the native app project by default at [windows/finsight/finsight.vcxproj](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/windows/finsight/finsight.vcxproj)
-- can also target the full solution at [windows/finsight.sln](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/windows/finsight.sln)
+See [Windows_Local_LLM_Runtime.md](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/documentation/Windows_Local_LLM_Runtime.md) for details.
 
-The default command is:
+## Submission Notes
 
-```powershell
-npm run msbuild:windows
-```
-
-That runs the native Windows app project in `Debug|x64`, which is the safest default for local testing.
-
-## Project Layout
-
-- [App.js](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/App.js)
-- [app.json](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/app.json)
-- [package.json](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/package.json)
-- [src](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/src)
-- [windows](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/windows)
-- [documentation](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/documentation)
-
-## Troubleshooting
-
-### Dependency install issues
-
-```powershell
-Remove-Item -Recurse -Force node_modules
-Remove-Item package-lock.json
-npm install
-```
-
-Only do this if your local install is broken and you are comfortable regenerating the lockfile.
-
-### Windows app does not launch
-
-Try:
-
-```powershell
-npm run start:windows
-npm run windows
-```
-
-This makes it easier to see whether the failure is in Metro startup or the native Windows build.
-
-### Metro port conflicts
-
-The Windows workflow expects Metro on port `8081`. If another process is using that port, stop the conflicting process and rerun `npm run dev:windows`.
+- Source code for the app, Windows target, and supporting assets is included in this repository.
+- Supporting design and documentation artifacts are included in the `documentation` folder.
+- Generated dependencies and local build outputs should not be committed; see [.gitignore](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/.gitignore).

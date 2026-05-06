@@ -1,13 +1,18 @@
 # Dependencies
 node_modules/
 
-# Expo / Metro
+# Expo / React Native / Metro
 .expo/
 .expo-shared/
 .metro-cache/
 dist/
 build/
 web-build/
+.bundle/
+
+# Coverage / test output
+coverage/
+.nyc_output/
 
 # Environment files
 .env
@@ -23,18 +28,28 @@ yarn-error.log*
 # OS files
 .DS_Store
 Thumbs.db
+Desktop.ini
+
+# Editor / IDE files
+.idea/
+.vs/
+*.code-workspace
 
 # Local scratch / temporary files
 .fake
 *.tmp
 *.temp
+*.bak
+*.orig
+~$*.docx
+~$*.xlsx
+~$*.pptx
 
 # Mobile native build output
 android/app/build/
 ios/build/
 
 # Windows / Visual Studio / React Native Windows
-.vs/
 *.user
 *.suo
 *.ncb
