@@ -142,6 +142,10 @@ export const AIStorage = {
 
   async clearPrevious() {
     if (isWindowsStorageShim()) {
+      const previousMetadata = await this.readPreviousMetadata();
+      if (previousMetadata?.fileName) {
+        await writeJson(`${PREVIOUS_DIR}/${previousMetadata.fileName}`, null);
+      }
       await writeJson(PREVIOUS_METADATA_FILE, null);
       return;
     }
@@ -152,6 +156,10 @@ export const AIStorage = {
 
   async removeCurrent() {
     if (isWindowsStorageShim()) {
+      const currentMetadata = await this.readCurrentMetadata();
+      if (currentMetadata?.fileName) {
+        await writeJson(`${CURRENT_DIR}/${currentMetadata.fileName}`, null);
+      }
       await writeJson(CURRENT_METADATA_FILE, null);
       await this.writeStatus({ state: 'not-installed' });
       return;
@@ -164,8 +172,22 @@ export const AIStorage = {
 
   async promoteTempToCurrent(tempModelFile, metadata) {
     if (isWindowsStorageShim()) {
+      const existingCurrentMetadata = await this.readCurrentMetadata();
+      if (existingCurrentMetadata?.fileName) {
+        const previousPackage = await readJson(`${CURRENT_DIR}/${existingCurrentMetadata.fileName}`, null);
+        await writeJson(PREVIOUS_METADATA_FILE, existingCurrentMetadata);
+        if (previousPackage !== null) {
+          await writeJson(`${PREVIOUS_DIR}/${existingCurrentMetadata.fileName}`, previousPackage);
+        }
+      } else {
+        await writeJson(PREVIOUS_METADATA_FILE, null);
+      }
+
+      const tempPackage = await readJson(tempModelFile.replace(/^.*ai[\\/]/, 'ai/'), null);
+      await writeJson(`${CURRENT_DIR}/${metadata.fileName}`, tempPackage);
       await this.writeCurrentMetadata(metadata);
       await this.writeStatus({ state: 'installed', modelId: metadata.id, version: metadata.version });
+      await writeJson(tempModelFile.replace(/^.*ai[\\/]/, 'ai/'), null);
       return;
     }
 
@@ -196,8 +218,19 @@ export const AIStorage = {
   async getTempModelFile(model) {
     if (isWindowsStorageShim()) return TEMP_DOWNLOAD_FILE;
     await ensureLayout();
-    const extension = String(model.fileName || 'model.bin').split('.').pop();
-    return `${TEMP_DIR}/${model.id}.${extension}`;
+    return `${TEMP_DIR}/${model.fileName || `${model.id}.bin`}`;
+  },
+
+  async writeTempPackage(model, payload) {
+    const tempFile = await this.getTempModelFile(model);
+    await writeJson(tempFile, payload);
+    return tempFile;
+  },
+
+  async readCurrentPackage(metadata) {
+    const packageFile = await this.getCurrentModelFile(metadata);
+    if (!packageFile) return null;
+    return readJson(packageFile, null);
   },
 
   async deleteTemp() {

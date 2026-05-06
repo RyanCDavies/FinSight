@@ -12,7 +12,7 @@
 namespace {
 
 std::filesystem::path ResolveStoragePath(std::wstring const &filename) {
-  if (filename.empty() || filename.find(L"..") != std::wstring::npos || filename.find_first_of(L"\\/") != std::wstring::npos) {
+  if (filename.empty() || filename.find(L"..") != std::wstring::npos) {
     throw std::invalid_argument("Invalid storage filename.");
   }
 
@@ -20,8 +20,27 @@ std::filesystem::path ResolveStoragePath(std::wstring const &filename) {
   std::filesystem::path directory{localPath};
   directory /= L"Finsight";
   std::filesystem::create_directories(directory);
+  std::filesystem::path relative{filename};
+  if (relative.is_absolute()) {
+    throw std::invalid_argument("Invalid storage filename.");
+  }
 
-  return directory / filename;
+  for (auto const &part : relative) {
+    const auto component = part.wstring();
+    if (component.empty() || component == L"." || component == L"..") {
+      throw std::invalid_argument("Invalid storage filename.");
+    }
+  }
+
+  auto resolved = (directory / relative).lexically_normal();
+  const auto root = directory.lexically_normal().wstring();
+  const auto candidate = resolved.wstring();
+  if (candidate.rfind(root, 0) != 0) {
+    throw std::invalid_argument("Invalid storage filename.");
+  }
+
+  std::filesystem::create_directories(resolved.parent_path());
+  return resolved;
 }
 
 std::string ReadUtf8(std::filesystem::path const &path) {

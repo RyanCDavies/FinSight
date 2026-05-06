@@ -76,6 +76,8 @@ void RejectPromise(std::shared_ptr<ReactPromiseType> const &promise, char const 
   promise->Reject(message);
 }
 
+void CapturePhotoFromCamera(std::wstring const &mode, std::shared_ptr<ReactPromiseType> const &promise);
+
 void StartOcrRecognition(
     std::wstring const &path,
     std::wstring const &mode,
@@ -176,6 +178,67 @@ void StartOcrRecognition(
   });
 }
 
+void CapturePhotoFromCamera(
+    winrt::Microsoft::ReactNative::ReactDispatcher const &uiDispatcher,
+    std::wstring const &mode,
+    std::shared_ptr<ReactPromiseType> const &promise) {
+  using winrt::Windows::Foundation::AsyncStatus;
+  using winrt::Microsoft::Windows::Media::Capture::CameraCaptureUI;
+  using winrt::Microsoft::Windows::Media::Capture::CameraCaptureUIPhotoFormat;
+  using winrt::Microsoft::Windows::Media::Capture::CameraCaptureUIMode;
+
+  try {
+    const HWND windowHandle = GetActiveWindow();
+    if (!windowHandle) {
+      RejectPromise(promise, "Unable to access the active app window for camera capture.");
+      return;
+    }
+
+    const auto windowId = winrt::Microsoft::UI::GetWindowIdFromWindow(windowHandle);
+    CameraCaptureUI cameraUi(windowId);
+    cameraUi.PhotoSettings().AllowCropping(false);
+    cameraUi.PhotoSettings().Format(CameraCaptureUIPhotoFormat::Jpeg);
+
+    auto captureOp = cameraUi.CaptureFileAsync(CameraCaptureUIMode::Photo);
+    captureOp.Completed([uiDispatcher, mode, promise](auto const &captureInfo, AsyncStatus captureStatus) {
+      uiDispatcher.Post([mode, promise, captureInfo, captureStatus]() noexcept {
+        try {
+          if (captureStatus != AsyncStatus::Completed) {
+            if (captureStatus == AsyncStatus::Canceled) {
+              promise->Resolve(nullptr);
+            } else {
+              RejectPromise(promise, "Unable to capture a photo from the Windows camera.");
+            }
+            return;
+          }
+
+          const auto file = captureInfo.GetResults();
+          if (!file) {
+            promise->Resolve(nullptr);
+            return;
+          }
+
+          StartOcrRecognition(std::wstring(file.Path().c_str()), mode, promise);
+        } catch (winrt::hresult_error const &ex) {
+          const auto message = WideToUtf8(std::wstring(ex.message().c_str()));
+          promise->Reject(message.c_str());
+        } catch (std::exception const &ex) {
+          promise->Reject(ex.what());
+        } catch (...) {
+          RejectPromise(promise, "Unable to capture a photo from the Windows camera.");
+        }
+      });
+    });
+  } catch (winrt::hresult_error const &ex) {
+    const auto message = WideToUtf8(std::wstring(ex.message().c_str()));
+    promise->Reject(message.c_str());
+  } catch (std::exception const &ex) {
+    promise->Reject(ex.what());
+  } catch (...) {
+    RejectPromise(promise, "Unable to initialize the Windows camera.");
+  }
+}
+
 } // namespace
 
 namespace winrt::finsight {
@@ -194,12 +257,10 @@ void OcrScannerModule::scanImage(
     return;
   }
 
-    uiDispatcher.Post([mode, promise]() noexcept {
+    uiDispatcher.Post([mode, promise, uiDispatcher]() noexcept {
       try {
         if (_wcsicmp(mode.c_str(), L"camera") == 0) {
-          RejectPromise(
-              promise,
-              "Direct camera capture is currently unavailable on Windows in this build. Please take the photo with the Windows Camera app, then choose the saved image to scan.");
+          CapturePhotoFromCamera(uiDispatcher, mode, promise);
           return;
         }
 

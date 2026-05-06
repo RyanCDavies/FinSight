@@ -6,22 +6,32 @@ const windowsAppStorage =
 
 const fallbackStore = globalThis.__finsightWindowsFileStore || (globalThis.__finsightWindowsFileStore = {});
 
+function normalizeStorageFilename(filename) {
+  return String(filename || '')
+    .replace(/[\\/]+/g, '__')
+    .replace(/[^A-Za-z0-9_.-]/g, '_');
+}
+
 async function readTextFile(filename) {
+  const storageFilename = normalizeStorageFilename(filename);
+
   if (windowsAppStorage?.readText) {
-    const value = await windowsAppStorage.readText(filename);
+    const value = await windowsAppStorage.readText(storageFilename);
     return typeof value === 'string' ? value : '';
   }
 
-  return Object.prototype.hasOwnProperty.call(fallbackStore, filename) ? fallbackStore[filename] : '';
+  return Object.prototype.hasOwnProperty.call(fallbackStore, storageFilename) ? fallbackStore[storageFilename] : '';
 }
 
 async function writeTextFile(filename, text) {
+  const storageFilename = normalizeStorageFilename(filename);
+
   if (windowsAppStorage?.writeText) {
-    await windowsAppStorage.writeText(filename, text);
+    await windowsAppStorage.writeText(storageFilename, text);
     return;
   }
 
-  fallbackStore[filename] = text;
+  fallbackStore[storageFilename] = text;
 }
 
 export async function readJsonFile(filename, fallbackValue) {

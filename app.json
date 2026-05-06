@@ -2,6 +2,7 @@
   "expo": {
     "name": "FinSight",
     "slug": "finsight",
+    "scheme": "finsight",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -20,6 +21,7 @@
       "package": "com.finsight.app"
     },
     "plugins": [
+      "expo-dev-client",
       "expo-sqlite",
       "expo-secure-store",
       [

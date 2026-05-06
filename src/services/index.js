@@ -64,18 +64,30 @@ export const FinancialDataService = {
   },
 
   async addTransaction(profileId, data) {
-    const db = await getDB();
-    const cats = await db.getAllAsync('SELECT * FROM categories');
-    const category_id = data.category_id || CategorizationEngine.resolveCategory(data, cats);
-    const id = generateId('tx');
+      const db = await getDB();
+      const cats = await db.getAllAsync('SELECT * FROM categories');
+      const category_id = data.category_id || CategorizationEngine.resolveCategory(data, cats);
+      const hash = data.hash || null;
 
-    await db.runAsync(
-      'INSERT INTO transactions (id, profile_id, date, merchant, amount, category_id, note, source, hash, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
-      [id, profileId, data.date, data.merchant, data.amount, category_id, data.note || '', data.source || 'manual', data.hash || null, new Date().toISOString()]
-    );
-    emitDataChanged();
-    return db.getFirstAsync('SELECT * FROM transactions WHERE id = ?', [id]);
-  },
+      if (hash) {
+        const existing = await db.getFirstAsync(
+          'SELECT * FROM transactions WHERE profile_id = ? AND hash = ? LIMIT 1',
+          [profileId, hash]
+        );
+        if (existing) {
+          return { ...existing, duplicate: true };
+        }
+      }
+
+      const id = generateId('tx');
+  
+      await db.runAsync(
+        'INSERT INTO transactions (id, profile_id, date, merchant, amount, category_id, note, source, hash, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
+        [id, profileId, data.date, data.merchant, data.amount, category_id, data.note || '', data.source || 'manual', hash, new Date().toISOString()]
+      );
+      emitDataChanged();
+      return db.getFirstAsync('SELECT * FROM transactions WHERE id = ?', [id]);
+    },
 
   async updateTransaction(id, updates) {
     const db = await getDB();
@@ -404,10 +416,45 @@ function formatCurrency(amount) {
   return `$${Number(amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function normalizeAssistantText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s&/-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function buildFallbackAnswer(message, context) {
-  const lower = String(message || '').toLowerCase();
+  const lower = normalizeAssistantText(message);
   const topCategory = Object.entries(context.spendByCategory || {}).sort((left, right) => right[1] - left[1])[0];
   const overBudget = (context.budgets || []).filter((budget) => budget.limit && budget.spent / budget.limit >= 0.9);
+  const recentTransactions = [...(context.transactions || [])]
+    .sort((left, right) => String(right.date || '').localeCompare(String(left.date || '')))
+    .slice(0, 3);
+  const merchantMatch = Array.from(new Set((context.transactions || []).map((transaction) => transaction.merchant).filter(Boolean))).find((merchant) => {
+    const normalized = normalizeAssistantText(merchant);
+    return normalized && lower.includes(normalized);
+  });
+  const categoryMatch = (context.categories || []).find((category) => {
+    const normalized = normalizeAssistantText(category.name);
+    return normalized && lower.includes(normalized);
+  });
+
+  if (!lower) {
+    return 'Ask about spending, budgets, transactions, subscriptions, imports, or simple finance topics like cash flow.';
+  }
+
+  if (/\b(hi|hello|hey)\b/.test(lower)) {
+    return 'Hi. I can answer from your local FinSight data or handle simple finance questions that do not need personal data.';
+  }
+
+  if (/\b(what can you do|help)\b/.test(lower)) {
+    return 'I can summarize spending, review budgets, inspect recent transactions, look for subscriptions, and answer basic finance questions directly in the app.';
+  }
+
+  if (/\b(what is cash flow|define cash flow)\b/.test(lower)) {
+    return 'Cash flow is the amount of money coming in minus the amount going out during a period.';
+  }
 
   if (lower.includes('budget')) {
     if (!context.budgets?.length) {
@@ -437,21 +484,147 @@ function buildFallbackAnswer(message, context) {
     return `Food and dining spend is ${formatCurrency(foodSpend)} this month. Trimming even one or two restaurant purchases each week would move that number quickly.`;
   }
 
+  if (/\b(recent|latest|last)\b/.test(lower) && /\b(transaction|purchase|charge|expense)\b/.test(lower)) {
+    if (!recentTransactions.length) {
+      return 'There are no saved transactions on this device yet.';
+    }
+
+    return recentTransactions
+      .map((transaction) => `${transaction.date}: ${transaction.merchant || 'Unknown merchant'} for ${formatCurrency(Math.abs(Number(transaction.amount || 0)))} in ${transaction.category}.`)
+      .join(' ');
+  }
+
+  if (merchantMatch) {
+    const matches = (context.transactions || []).filter((transaction) => normalizeAssistantText(transaction.merchant) === normalizeAssistantText(merchantMatch));
+    const total = matches.reduce((sum, transaction) => sum + Math.abs(Number(transaction.amount || 0)), 0);
+    const latest = [...matches].sort((left, right) => String(right.date || '').localeCompare(String(left.date || '')))[0];
+    return `${merchantMatch} appears ${matches.length} time${matches.length === 1 ? '' : 's'} in your saved history for ${formatCurrency(total)} total. The most recent was ${formatCurrency(Math.abs(Number(latest?.amount || 0)))} on ${latest?.date}.`;
+  }
+
+  if (categoryMatch) {
+    const categorySpend = Number((context.spendByCategory || {})[categoryMatch.name] || 0);
+    return categorySpend
+      ? `${categoryMatch.name} spending is ${formatCurrency(categorySpend)} this month.`
+      : `I do not see spending for ${categoryMatch.name} in the current month yet.`;
+  }
+
+  if (lower.includes('subscription') || lower.includes('recurring')) {
+    if (!context.subscriptions?.length) {
+      return 'No recurring subscriptions are currently detected in your local data.';
+    }
+
+    return context.subscriptions
+      .slice(0, 3)
+      .map((subscription) => `${subscription.merchant} appears ${subscription.frequency} at ${formatCurrency(Math.abs(subscription.amount))}.`)
+      .join(' ');
+  }
+
+  if (lower.includes('import') || lower.includes('ocr') || lower.includes('categor')) {
+    const uncategorized = (context.transactions || []).filter((transaction) => transaction.categoryId === 'cat_other').length;
+    return uncategorized
+      ? `${uncategorized} imported transactions are still in Other and worth reviewing.`
+      : 'Your imported transactions look categorized at a high level from the current local data snapshot.';
+  }
+
   return `${context.summary || 'Your local finance summary is ready.'} ${topCategory ? `Your highest category is ${topCategory[0]} at ${formatCurrency(topCategory[1])}.` : ''}`.trim();
 }
 
 export const LocalAIService = {
+  async getAssistantContext(profileId) {
+    const [profile, dashboardData, transactions] = await Promise.all([
+      (async () => {
+        const db = await getDB();
+        return db.getFirstAsync('SELECT id, name, email, preferences, created_at FROM profiles WHERE id = ?', [profileId]);
+      })(),
+      ReportingAnalyticsService.getDashboardData(profileId),
+      FinancialDataService.getTransactions(profileId),
+    ]);
+
+    const categoryNameById = Object.fromEntries((dashboardData.cats || []).map((category) => [category.id, category.name]));
+
+    return {
+      profile: profile
+        ? {
+            id: profile.id,
+            name: profile.name,
+            email: profile.email,
+            createdAt: profile.created_at,
+            preferences: (() => {
+              try {
+                return JSON.parse(profile.preferences || '{}');
+              } catch {
+                return {};
+              }
+            })(),
+          }
+        : null,
+      summary: `Spent: $${dashboardData.totalSpend.toFixed(2)}, Income: $${dashboardData.totalIncome.toFixed(2)}`,
+      totalSpend: dashboardData.totalSpend,
+      totalIncome: dashboardData.totalIncome,
+      spendByCategory: Object.fromEntries(
+        Object.entries(dashboardData.spendByCategory).map(([key, value]) => [categoryNameById[key] || key, value])
+      ),
+      categories: (dashboardData.cats || []).map((category) => ({
+        id: category.id,
+        name: category.name,
+        icon: category.icon,
+        color: category.color,
+      })),
+      budgets: (dashboardData.budgets || []).map((budget) => ({
+        id: budget.id,
+        categoryId: budget.category_id,
+        category: categoryNameById[budget.category_id] || budget.category_id,
+        limit: budget.limit_amount,
+        spent: budget.spent,
+        progress: budget.progress,
+        description: budget.description || '',
+      })),
+      anomalies: (dashboardData.anomalies || []).map((anomaly) => ({
+        transactionId: anomaly.transaction_id,
+        description: anomaly.description,
+        severity: anomaly.severity,
+        detectedAt: anomaly.detected_at,
+      })),
+      subscriptions: (dashboardData.subscriptions || []).map((subscription) => ({
+        merchant: subscription.merchant,
+        amount: subscription.amount,
+        frequency: subscription.frequency,
+        lastSeen: subscription.last_seen,
+        count: subscription.count,
+      })),
+      forecasts: (dashboardData.forecasts || []).map((entry) => ({
+        categoryId: entry.category?.id,
+        category: entry.category?.name || entry.category?.id,
+        predicted: entry.forecast?.predicted,
+        confidence: entry.forecast?.confidence,
+      })),
+      monthlyTrend: dashboardData.monthlyTrend || [],
+      transactions: (transactions || []).map((transaction) => ({
+        id: transaction.id,
+        date: transaction.date,
+        merchant: transaction.merchant,
+        amount: transaction.amount,
+        note: transaction.note,
+        source: transaction.source,
+        categoryId: transaction.category_id,
+        category: categoryNameById[transaction.category_id] || transaction.category_id || 'Uncategorized',
+      })),
+    };
+  },
+
   async getStatus() {
-    const [status, recommendedModel] = await Promise.all([
+    const [status, recommendedModel, backendStatus] = await Promise.all([
       AIModelManager.getStatus(),
       AIModelManager.getRecommendedModel(),
+      AIRuntime.getBackendStatus().catch(() => null),
     ]);
 
     if (status.state === 'installed') {
       return {
         ...status,
         ready: true,
-        detail: `${status.name} is installed locally and ready for mobile runtime integration.`,
+        backendStatus,
+        detail: backendStatus?.reason || `${status.name} is installed locally and ready for offline chat plus OCR title cleanup.`,
       };
     }
 
@@ -459,7 +632,8 @@ export const LocalAIService = {
       return {
         ...status,
         ready: false,
-        detail: `Downloading ${recommendedModel?.name || 'local AI model'}...`,
+        backendStatus,
+        detail: status.detail || `Downloading ${recommendedModel?.name || 'local AI model'}...`,
       };
     }
 
@@ -467,8 +641,9 @@ export const LocalAIService = {
       ...status,
       ready: false,
       recommendedModel,
+      backendStatus,
       detail: recommendedModel
-        ? `Download ${recommendedModel.name} (${Math.round(recommendedModel.sizeBytes / (1024 * 1024))} MB) to enable local AI after install.`
+        ? `Download ${recommendedModel.name} (${Math.round(recommendedModel.sizeBytes / (1024 * 1024))} MB) to enable offline chat and OCR title cleanup.`
         : 'No local AI model manifest is available yet.',
     };
   },
@@ -486,10 +661,14 @@ export const LocalAIService = {
     return AIModelManager.removeInstalledModel();
   },
 
-  async ask(message, context, onChunk) {
+  async cancelActiveGeneration() {
+    return AIRuntime.cancelGeneration();
+  },
+
+  async ask(message, context, onChunk, conversationHistory = []) {
     const status = await AIModelManager.getStatus();
     if (status.state !== 'installed') {
-      const fallback = `${buildFallbackAnswer(message, context)}\n\nInstall the local model package to enable fully on-device AI responses.`;
+      const fallback = buildFallbackAnswer(message, context);
       onChunk?.(fallback);
       return fallback;
     }
@@ -498,16 +677,46 @@ export const LocalAIService = {
       await AIRuntime.loadModel();
       const result = await AIRuntime.generate({
         userPrompt: message,
-        contextSummary: context.summary,
+        fullContext: context,
+        conversationHistory,
       });
-      const answer = `${result.text}\n\n${buildFallbackAnswer(message, context)}`;
+      const answer = String(result.text || buildFallbackAnswer(message, context)).trim();
       onChunk?.(answer);
       return answer;
     } catch (error) {
       console.warn('Local AI runtime failed:', error);
-      const fallback = `${buildFallbackAnswer(message, context)}\n\nThe local model package is installed, but the native mobile inference bridge is not connected yet.`;
+      const detail = error?.message ? ` Runtime detail: ${error.message}` : '';
+      const fallback = `${buildFallbackAnswer(message, context)}\n\nThe local model package is installed, but the offline assistant runtime could not answer this request.${detail}`;
       onChunk?.(fallback);
       return fallback;
+    }
+  },
+
+  async refineOCRRows(rows, ocrText) {
+    if (!Array.isArray(rows) || !rows.length) return rows;
+
+    const status = await AIModelManager.getStatus();
+    if (status.state !== 'installed') {
+      return rows;
+    }
+
+    try {
+      await AIRuntime.loadModel();
+      const nextRows = await Promise.all(rows.map(async (row) => {
+        const suggestedMerchant = await AIRuntime.suggestTransactionTitle({
+          merchant: row.merchant,
+          note: row.note,
+          ocrText,
+        });
+
+        return suggestedMerchant
+          ? { ...row, merchant: suggestedMerchant }
+          : row;
+      }));
+      return nextRows;
+    } catch (error) {
+      console.warn('Local AI OCR refinement failed:', error);
+      return rows;
     }
   },
 };

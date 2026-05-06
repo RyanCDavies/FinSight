@@ -64,6 +64,7 @@
   </ImportGroup>
   <ImportGroup Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(SolutionDir)\OrtGenAi.props" Condition="exists('$(SolutionDir)\OrtGenAi.props')" Label="FinSightOrtGenAiProps" />
   </ImportGroup>
   <ImportGroup Label="ReactNativeWindowsPropertySheets">
     <Import Project="$(ReactNativeWindowsDir)\PropertySheets\External\Microsoft.ReactNative.Composition.CppApp.props" />
@@ -84,7 +85,7 @@
       </AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>Comdlg32.lib;shell32.lib;user32.lib;windowsapp.lib;%(AdditionalDependenices)</AdditionalDependencies>
+      <AdditionalDependencies>Comdlg32.lib;shell32.lib;user32.lib;urlmon.lib;windowsapp.lib;%(AdditionalDependenices)</AdditionalDependencies>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
@@ -109,10 +110,16 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <OrtGenAiRoot Condition="'$(OrtGenAiRoot)' == ''"></OrtGenAiRoot>
+    <OrtRoot Condition="'$(OrtRoot)' == ''">$(OrtGenAiRoot)</OrtRoot>
+    <FinSightOrtGenAiEnabled>false</FinSightOrtGenAiEnabled>
+  </PropertyGroup>
   <ItemGroup>
     <ClInclude Include="AppStorageModule.h" />
     <ClInclude Include="finsight.h" />
     <ClInclude Include="CsvPickerModule.h" />
+    <ClInclude Include="LocalLlmModule.h" />
     <ClInclude Include="OcrScannerModule.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="AutolinkedNativeModules.g.h" />
@@ -122,6 +129,7 @@
   <ItemGroup>
     <ClCompile Include="AppStorageModule.cpp" />
     <ClCompile Include="CsvPickerModule.cpp" />
+    <ClCompile Include="LocalLlmModule.cpp" />
     <ClCompile Include="OcrScannerModule.cpp" />
     <ClCompile Include="finsight.cpp" />
     <ClCompile Include="AutolinkedNativeModules.g.cpp" />
@@ -147,6 +155,29 @@
   </ImportGroup>
   <ItemGroup>
   </ItemGroup>
+  <ItemDefinitionGroup Condition="'$(OrtGenAiRoot)' != ''">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(OrtGenAiRoot)\include;$(OrtRoot)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>FINSIGHT_ENABLE_ORT_GENAI=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <AdditionalLibraryDirectories>$(OrtGenAiRoot)\lib;$(OrtRoot)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>onnxruntime-genai.lib;onnxruntime.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(OrtGenAiRoot)' == ''">
+    <ClCompile>
+      <PreprocessorDefinitions>FINSIGHT_ENABLE_ORT_GENAI=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <Target Name="CopyOrtRuntimeBinaries" AfterTargets="Build" Condition="'$(OrtGenAiRoot)' != ''">
+    <ItemGroup>
+      <FinSightOrtRuntimeDll Include="$(OrtGenAiRoot)\lib\onnxruntime-genai.dll" Condition="Exists('$(OrtGenAiRoot)\lib\onnxruntime-genai.dll')" />
+      <FinSightOrtRuntimeDll Include="$(OrtRoot)\lib\onnxruntime.dll" Condition="Exists('$(OrtRoot)\lib\onnxruntime.dll')" />
+      <FinSightOrtRuntimeDll Include="$(OrtRoot)\lib\onnxruntime_providers_shared.dll" Condition="Exists('$(OrtRoot)\lib\onnxruntime_providers_shared.dll')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(FinSightOrtRuntimeDll)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="'@(FinSightOrtRuntimeDll)' != ''" />
+  </Target>
   <Target Name="EnsureReactNativeWindowsTargets" BeforeTargets="PrepareForBuild">
     <PropertyGroup>
       <ErrorText>This project references targets in your node_modules\react-native-windows folder. The missing file is {0}.</ErrorText>

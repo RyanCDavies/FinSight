@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <!-- Point this at the folder that contains the ONNX Runtime GenAI include/ and lib/ directories. -->
+    <OrtGenAiRoot>C:\Users\krank\Documents\CPP Classes\4800\finsight-expo</OrtGenAiRoot>
+
+    <!-- Point this at the folder that contains the core ONNX Runtime include/ and lib/ directories.
+         If you built ORT GenAI from source and both libs are in the same output folder, you can reuse the same path. -->
+    <OrtRoot>C:\Users\krank\Documents\CPP Classes\4800\finsight-expo</OrtRoot>
+  </PropertyGroup>
+</Project>

@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { getDB, getSession } from './src/db/database';
+import { AIRuntime } from './src/ai';
 import { colors } from './src/theme';
 import {
   AssistantScreen,
@@ -17,6 +18,8 @@ import {
 
 const Tab = createBottomTabNavigator();
 const isWindows = Platform.OS === 'windows';
+const appIcon = require('./assets/icon.png');
+const headerIcon = require('./assets/ico.png');
 const headerTitleStyle = isWindows
   ? { fontSize: 18 }
   : { fontFamily: 'SpaceGrotesk_700Bold', fontSize: 18 };
@@ -77,9 +80,18 @@ function CategoryIcon({ routeName, focused }) {
   );
 }
 
+function HeaderLogo() {
+  return (
+    <View style={styles.headerLogoFrame}>
+      <Image source={headerIcon} style={styles.headerLogoImage} resizeMode="cover" />
+    </View>
+  );
+}
+
 export default function App() {
   const [profile, setProfile] = useState(null);
   const [booting, setBooting] = useState(true);
+  const [preloadQueued, setPreloadQueued] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -100,10 +112,31 @@ export default function App() {
     })();
   }, []);
 
+  useEffect(() => {
+    if (booting || !profile || preloadQueued) {
+      return undefined;
+    }
+
+    setPreloadQueued(true);
+    const timer = setTimeout(() => {
+      AIRuntime.loadModel().catch((error) => {
+        if (String(error?.message || '').includes('No local AI model is installed.')) {
+          return;
+        }
+        console.warn('Local AI preload failed:', error);
+      });
+    }, 1200);
+
+    return () => clearTimeout(timer);
+  }, [booting, profile, preloadQueued]);
+
   if (booting) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' }}>
-        <Text style={{ fontSize: 40, marginBottom: 16, color: colors.text }}>FinSight</Text>
+      <View style={styles.bootScreen}>
+        <View style={styles.bootLogoFrame}>
+          <Image source={appIcon} style={styles.bootLogoImage} resizeMode="cover" />
+        </View>
+        <Text style={styles.bootTitle}>FinSight</Text>
         <ActivityIndicator color={colors.accent} />
       </View>
     );
@@ -127,6 +160,8 @@ export default function App() {
             headerStyle: { backgroundColor: colors.surface, borderBottomColor: colors.border, borderBottomWidth: 1 },
             headerTintColor: colors.text,
             headerTitleStyle,
+            headerLeft: () => <HeaderLogo />,
+            headerLeftContainerStyle: styles.headerLeftContainer,
             tabBarStyle: {
               backgroundColor: colors.surface,
               borderTopColor: colors.border,
@@ -176,6 +211,52 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  bootScreen: {
+    flex: 1,
+    backgroundColor: colors.bg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  bootLogoFrame: {
+    width: 124,
+    height: 124,
+    borderRadius: 28,
+    padding: 6,
+    marginBottom: 20,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  bootLogoImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 22,
+  },
+  bootTitle: {
+    fontSize: 40,
+    marginBottom: 16,
+    color: colors.text,
+  },
+  headerLeftContainer: {
+    paddingLeft: 14,
+  },
+  headerLogoFrame: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    padding: 2,
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  headerLogoImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+  },
   tabBarItem: {
     paddingVertical: 4,
   },

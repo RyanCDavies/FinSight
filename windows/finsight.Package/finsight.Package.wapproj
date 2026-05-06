@@ -45,6 +45,13 @@
   <ImportGroup Label="ReactNativeWindowsPropertySheets">
     <Import Project="$(ReactNativeWindowsDir)\PropertySheets\External\Microsoft.ReactNative.Composition.Package.props" Condition="Exists('$(ReactNativeWindowsDir)\PropertySheets\External\Microsoft.ReactNative.Composition.Package.props')" />
   </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(SolutionDir)\OrtGenAi.props" Condition="Exists('$(SolutionDir)\OrtGenAi.props')" Label="FinSightOrtGenAiProps" />
+  </ImportGroup>
+  <PropertyGroup>
+    <OrtGenAiRoot Condition="'$(OrtGenAiRoot)' == ''"></OrtGenAiRoot>
+    <OrtRoot Condition="'$(OrtRoot)' == ''">$(OrtGenAiRoot)</OrtRoot>
+  </PropertyGroup>
   <ItemGroup>
     <AppxManifest Include="Package.appxmanifest">
       <SubType>Designer</SubType>
@@ -68,6 +75,15 @@
   <ImportGroup Label="ReactNativeWindowsTargets">
     <Import Project="$(ReactNativeWindowsDir)\PropertySheets\External\Microsoft.ReactNative.Composition.Package.targets" Condition="Exists('$(ReactNativeWindowsDir)\PropertySheets\External\Microsoft.ReactNative.Composition.Package.targets')" />
   </ImportGroup>
+  <Target Name="CopyOrtRuntimeBinariesToPackageOutput" AfterTargets="Build" Condition="'$(OrtGenAiRoot)' != ''">
+    <ItemGroup>
+      <FinSightOrtRuntimeDll Include="$(OrtGenAiRoot)\lib\onnxruntime-genai.dll" Condition="Exists('$(OrtGenAiRoot)\lib\onnxruntime-genai.dll')" />
+      <FinSightOrtRuntimeDll Include="$(OrtRoot)\lib\onnxruntime.dll" Condition="Exists('$(OrtRoot)\lib\onnxruntime.dll')" />
+      <FinSightOrtRuntimeDll Include="$(OrtRoot)\lib\onnxruntime_providers_shared.dll" Condition="Exists('$(OrtRoot)\lib\onnxruntime_providers_shared.dll')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(FinSightOrtRuntimeDll)" DestinationFolder="$(OutDir)finsight" SkipUnchangedFiles="true" Condition="'@(FinSightOrtRuntimeDll)' != '' and Exists('$(OutDir)finsight')" />
+    <Copy SourceFiles="@(FinSightOrtRuntimeDll)" DestinationFolder="$(OutDir)AppX\finsight" SkipUnchangedFiles="true" Condition="'@(FinSightOrtRuntimeDll)' != '' and Exists('$(OutDir)AppX\finsight')" />
+  </Target>
   <Target Name="EnsureReactNativeWindowsTargets" BeforeTargets="PrepareForBuild">
     <PropertyGroup>
       <ErrorText>This project references targets in your node_modules\react-native-windows folder that are missing. The missing file is {0}.</ErrorText>

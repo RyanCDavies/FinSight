@@ -95,6 +95,7 @@ Important:
 
 - `iOS` requires macOS for the native simulator workflow.
 - This project uses native capabilities, so if a feature depends on platform-native code it may not behave the same in Expo Go as it would in a full native build.
+- Receipt scanning on Expo mobile is on-device, but it needs a native Expo development/custom build so the OCR module is bundled. Expo Go alone will not include the scanner.
 
 ### Windows desktop
 
@@ -126,6 +127,10 @@ npm run start:windows
 npm run windows
 npm run dev:windows
 npm run test:windows
+npm run msbuild:windows
+npm run msbuild:windows:release
+npm run msbuild:windows:solution
+npm run test:windows:native
 ```
 
 What they do:
@@ -137,6 +142,10 @@ What they do:
 - `npm run windows`: builds and launches the Windows app without starting Metro
 - `npm run dev:windows`: starts Metro and launches the Windows app together
 - `npm run test:windows`: runs Jest with the Windows-specific config
+- `npm run msbuild:windows`: restores and builds the native Windows app project with MSBuild in `Debug|x64`
+- `npm run msbuild:windows:release`: restores and builds the native Windows app project with MSBuild in `Release|x64`
+- `npm run msbuild:windows:solution`: restores and builds the full Windows solution, including the packaging project
+- `npm run test:windows:native`: native Windows build verification through MSBuild for testing setup
 
 ## Windows-Specific Notes
 
@@ -152,6 +161,24 @@ If the Windows build fails early, check these first:
 - the Windows SDK is installed
 - `npm install` completed successfully
 - NuGet package restore is allowed from the configured feeds
+
+### Using MSBuild directly
+
+This repo now includes a helper script at [scripts/invoke-msbuild.js](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/scripts/invoke-msbuild.js) that:
+
+- locates `MSBuild.exe` automatically from standard Visual Studio install paths, or from `MSBUILD_EXE` if you set it explicitly
+- sanitizes the environment before launching `msbuild` so duplicate `Path`/`PATH` entries do not break the C++ toolchain
+- restores NuGet packages
+- builds the native app project by default at [windows/finsight/finsight.vcxproj](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/windows/finsight/finsight.vcxproj)
+- can also target the full solution at [windows/finsight.sln](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/windows/finsight.sln)
+
+The default command is:
+
+```powershell
+npm run msbuild:windows
+```
+
+That runs the native Windows app project in `Debug|x64`, which is the safest default for local testing.
 
 ## Project Layout
 

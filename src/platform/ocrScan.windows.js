@@ -6,7 +6,7 @@ const windowsOcrScanner =
 
 export async function scanTransactionImageAsync(mode = 'library') {
   if (mode === 'camera') {
-    throw new Error('Direct camera capture is currently unavailable on Windows in this build. Please take the photo with the Windows Camera app, then choose the saved image to scan.');
+    throw new Error('Taking a photo directly in the Windows app is not supported. Please choose an existing receipt image to scan.');
   }
 
   if (!windowsOcrScanner?.scanImage) {

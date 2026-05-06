@@ -63,12 +63,14 @@ export function Btn({ children, onPress, variant = 'primary', size = 'md', disab
 // ─── Input ──────────────────────────────────
 
 export function Input({ label, value, onChangeText, placeholder, secureTextEntry, keyboardType, icon, multiline }) {
+  const isWindows = Platform.OS === 'windows';
+
   return (
     <View style={{ marginBottom: spacing.lg }}>
       {label && (
         <Text style={styles.inputLabel}>{label}</Text>
       )}
-      <View style={{ position: 'relative' }}>
+      <View style={[styles.inputFrame, isWindows && styles.windowsInputFrame]}>
         {icon && <Text style={styles.inputIcon}>{icon}</Text>}
         <TextInput
           value={value}
@@ -80,6 +82,7 @@ export function Input({ label, value, onChangeText, placeholder, secureTextEntry
           multiline={multiline}
           style={[
             styles.input,
+            isWindows && styles.windowsInput,
             icon && { paddingLeft: 40 },
             multiline && { height: 80, textAlignVertical: 'top' },
           ]}
@@ -243,6 +246,15 @@ const styles = StyleSheet.create({
     fontSize:  16,
     zIndex:    1,
   },
+  inputFrame: {
+    position: 'relative',
+  },
+  windowsInputFrame: {
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+  },
   input: {
     backgroundColor: colors.surfaceAlt,
     borderWidth:     1,
@@ -252,6 +264,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     color:           colors.text,
     fontSize:        font.sizes.md,
+  },
+  windowsInput: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
   },
   progressTrack: {
     backgroundColor: colors.surfaceAlt,

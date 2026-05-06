@@ -335,24 +335,6 @@ function CashFlowChartCard({ monthlyTrend, totalSpend, totalIncome, lastMonthSpe
   );
 }
 
-function buildAssistantContext(data) {
-  return {
-    summary: `Spent: $${data.totalSpend.toFixed(2)}, Income: $${data.totalIncome.toFixed(2)}`,
-    totalSpend: data.totalSpend,
-    totalIncome: data.totalIncome,
-    spendByCategory: Object.fromEntries(
-      Object.entries(data.spendByCategory).map(([key, value]) => [data.cats.find(c => c.id === key)?.name || key, value])
-    ),
-    budgets: data.budgets.map((budget) => ({
-      category: data.cats.find(c => c.id === budget.category_id)?.name,
-      limit: budget.limit_amount,
-      spent: budget.spent,
-    })),
-    anomalies: data.anomalies.map((anomaly) => anomaly.description),
-    subscriptions: data.subscriptions,
-  };
-}
-
 // ─────────────────────────────────────────────
 // Auth Screen
 // ─────────────────────────────────────────────
@@ -625,6 +607,17 @@ export function TransactionsScreen({ profile }) {
     }
 
     const { parsedAmount } = validation;
+    if (editTx) {
+      await FinancialDataService.updateTransaction(editTx.id, { ...form, amount: parsedAmount });
+    } else {
+      await FinancialDataService.addTransaction(profile.id, { ...form, amount: parsedAmount });
+    }
+    setShowAdd(false);
+    setEditTx(null);
+    setForm(createEmptyTransactionForm());
+    load();
+    return;
+    /*
     const action = editTx ? 'Update' : 'Add';
     const summary = `${form.merchant} · $${Math.abs(parsedAmount).toFixed(2)} · ${form.date}`;
     Alert.alert(
@@ -648,6 +641,7 @@ export function TransactionsScreen({ profile }) {
         },
       ]
     );
+    */
   };
 
   const handleDelete = (id) => {
@@ -760,6 +754,23 @@ export function TransactionsScreen({ profile }) {
     </View>
   );
 
+  const openReceiptScan = useCallback(() => {
+    setShowOcrImport(true);
+  }, []);
+
+  const openScannedTransactionDraft = useCallback((row, scanResult) => {
+    setShowOcrImport(false);
+    setEditTx(null);
+    setForm({
+      date: row.date || getTodayIsoDate(),
+      merchant: row.merchant || '',
+      amount: String(row.amount ?? ''),
+      category_id: row.category_id || '',
+      note: row.note || scanResult?.text || '',
+    });
+    setShowAdd(true);
+  }, []);
+
   return (
     <View style={styles.screen}>
       {/* Toolbar */}
@@ -769,7 +780,7 @@ export function TransactionsScreen({ profile }) {
           <TextInput
             value={search} onChangeText={setSearch} placeholder="Search transactions..."
             placeholderTextColor={colors.textMuted}
-            style={styles.searchInput}
+            style={[styles.searchInput, Platform.OS === 'windows' && styles.windowsTextInput]}
           />
         </View>
         <View style={styles.toolbarSection}>
@@ -780,7 +791,7 @@ export function TransactionsScreen({ profile }) {
             <Btn size="sm" onPress={() => setShowImport(true)} fullWidth>Import CSV</Btn>
           </View>
           <View style={styles.toolbarActionButton}>
-            <Btn size="sm" variant="outline" onPress={() => setShowOcrImport(true)} fullWidth>Scan Receipt</Btn>
+            <Btn size="sm" onPress={openReceiptScan} fullWidth>Scan Receipt</Btn>
           </View>
           <View style={styles.toolbarActionButton}>
             <Btn size="sm" onPress={() => { setShowAdd(true); setEditTx(null); }} fullWidth>Add Transaction</Btn>
@@ -848,7 +859,14 @@ export function TransactionsScreen({ profile }) {
 
       {/* CSV Import Sheet */}
       {showImport && <CSVImportSheet profile={profile} onClose={() => { setShowImport(false); load(); }} />}
-      {showOcrImport && <OCRScanReviewSheet profile={profile} categories={categories} onClose={() => { setShowOcrImport(false); load(); }} />}
+      {showOcrImport && (
+        <OCRScanReviewSheet
+          profile={profile}
+          categories={categories}
+          onScanDraft={openScannedTransactionDraft}
+          onClose={() => { setShowOcrImport(false); load(); }}
+        />
+      )}
     </View>
   );
 }
@@ -965,83 +983,13 @@ function CSVImportSheet({ profile, onClose }) {
   );
 }
 
-function OCRImportSheet({ profile, onClose }) {
-  const [ocrText, setOcrText] = useState('');
-  const [previewRows, setPreviewRows] = useState([]);
-  const [result, setResult] = useState(null);
-  const [loading, setLoading] = useState(false);
 
-  const analyze = () => {
-    const parsed = ImportIntegrationService.parseOCRText(ocrText);
-    if (parsed.error) {
-      Alert.alert('OCR text not recognized', parsed.error);
-      return;
-    }
-    setPreviewRows(parsed.rows);
-  };
-
-  const importRows = async () => {
-    if (!previewRows.length || loading) return;
-    setLoading(true);
-    try {
-      const nextResult = await ImportIntegrationService.importTransactions(profile.id, previewRows, 'ocr');
-      setResult(nextResult);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <BottomSheet visible title="Import OCR Text" onClose={onClose}>
-      {!result && (
-        <View>
-          <Text style={styles.mapHint}>Paste OCR output from a scanned receipt or bank statement. Each transaction line should include a date and amount.</Text>
-          <TextInput
-            value={ocrText}
-            onChangeText={setOcrText}
-            multiline
-            placeholder={'04/20/2026 STARBUCKS 6.75\n04/21/2026 PAYROLL DEPOSIT 1200.00'}
-            placeholderTextColor={colors.textMuted}
-            style={styles.ocrInput}
-          />
-          <Btn onPress={analyze} fullWidth>Analyze OCR Text</Btn>
-
-          {previewRows.length > 0 && (
-            <View style={{ marginTop: 16, gap: 10 }}>
-              <Text style={styles.toolbarSectionTitle}>{previewRows.length} transactions detected</Text>
-              {previewRows.slice(0, 5).map((row, index) => (
-                <View key={`${row.date}-${row.merchant}-${index}`} style={styles.ocrPreviewCard}>
-                  <Text style={styles.txMerchant}>{row.merchant}</Text>
-                  <Text style={styles.txMeta}>{row.date} · ${Math.abs(row.amount).toFixed(2)}</Text>
-                </View>
-              ))}
-              {previewRows.length > 5 && <Text style={styles.importHint}>Only the first 5 rows are previewed here. All detected rows will be imported.</Text>}
-              <Btn onPress={importRows} fullWidth disabled={loading}>{loading ? 'Importing...' : 'Import OCR Transactions'}</Btn>
-            </View>
-          )}
-        </View>
-      )}
-
-      {!!result && (
-        <View style={styles.doneState}>
-          <Text style={{ fontSize: 48 }}>âœ…</Text>
-          <Text style={styles.doneTitle}>OCR Import Complete</Text>
-          <Text style={{ color: colors.success, marginTop: 8 }}>{result.imported} transactions imported</Text>
-          {result.duplicates > 0 && <Text style={{ color: colors.textMuted, fontSize: font.sizes.sm, marginTop: 4 }}>{result.duplicates} duplicates skipped</Text>}
-          {result.autoCategorized > 0 && <Text style={{ color: colors.textMuted, fontSize: font.sizes.sm, marginTop: 4 }}>{result.autoCategorized} transactions auto-categorized</Text>}
-          {result.uncategorized > 0 && <Text style={{ color: colors.warning, fontSize: font.sizes.sm, marginTop: 4 }}>{result.uncategorized} transactions left in Other for review</Text>}
-          <Btn onPress={onClose} style={{ marginTop: 20 }} fullWidth>Done</Btn>
-        </View>
-      )}
-    </BottomSheet>
-  );
-}
-
-function OCRScanReviewSheet({ profile, categories, onClose }) {
+function OCRScanReviewSheet({ profile, categories, onScanDraft, onClose }) {
   const [ocrText, setOcrText] = useState('');
   const [drafts, setDrafts] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [savedCount, setSavedCount] = useState(0);
+  const [duplicateCount, setDuplicateCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [scanResult, setScanResult] = useState(null);
 
@@ -1065,16 +1013,23 @@ function OCRScanReviewSheet({ profile, categories, onClose }) {
     }
   }, []);
 
-  const analyzeText = useCallback((text, nextScanResult = null) => {
+  const analyzeText = useCallback(async (text, nextScanResult = null) => {
     const parsed = ImportIntegrationService.parseOCRText(text);
     if (parsed.error) {
       Alert.alert('Scan not recognized', parsed.error);
       return false;
     }
 
-    buildDrafts(parsed.rows, nextScanResult);
+    const refinedRows = await LocalAIService.refineOCRRows(parsed.rows, text);
+
+    if (refinedRows.length === 1) {
+      onScanDraft?.(refinedRows[0], nextScanResult);
+      return true;
+    }
+
+    buildDrafts(refinedRows, nextScanResult);
     return true;
-  }, [buildDrafts]);
+  }, [buildDrafts, onScanDraft]);
 
   const startScan = async (mode) => {
     if (loading) return;
@@ -1087,7 +1042,7 @@ function OCRScanReviewSheet({ profile, categories, onClose }) {
         setScanResult(nextScanResult);
         return;
       }
-      analyzeText(nextScanResult.text, nextScanResult);
+      await analyzeText(nextScanResult.text, nextScanResult);
     } catch (error) {
       Alert.alert('Scan unavailable', error.message || 'Unable to scan that image on this device.');
     } finally {
@@ -1121,12 +1076,20 @@ function OCRScanReviewSheet({ profile, categories, onClose }) {
 
     setLoading(true);
     try {
-      await FinancialDataService.addTransaction(profile.id, {
+      const nextTransaction = {
         ...currentDraft,
         amount: validation.parsedAmount,
         source: currentDraft.source || 'ocr',
+      };
+      const savedTransaction = await FinancialDataService.addTransaction(profile.id, {
+        ...nextTransaction,
+        hash: ImportIntegrationService.generateHash(nextTransaction),
       });
-      setSavedCount((count) => count + 1);
+      if (savedTransaction?.duplicate) {
+        setDuplicateCount((count) => count + 1);
+      } else {
+        setSavedCount((count) => count + 1);
+      }
       removeCurrentDraft();
     } finally {
       setLoading(false);
@@ -1162,17 +1125,19 @@ function OCRScanReviewSheet({ profile, categories, onClose }) {
 
   return (
       <BottomSheet visible title="Scan Transaction" onClose={onClose} footer={scanFooter}>
-        {!currentDraft && savedCount === 0 && (
+        {!currentDraft && savedCount === 0 && duplicateCount === 0 && (
           <View>
             <Text style={styles.mapHint}>
               {Platform.OS === 'windows'
-                ? 'Choose a saved receipt image to scan. Windows direct camera capture is temporarily disabled in this build.'
+                ? 'Choose a saved receipt image to scan.'
                 : 'Scan or take a photo of a receipt or statement.'}
             </Text>
             <View style={styles.scanActionColumn}>
               <Btn onPress={() => startScan('library')} fullWidth disabled={loading}>{loading ? 'Scanning...' : 'Choose Image'}</Btn>
               {Platform.OS !== 'windows' && (
-                <Btn variant="outline" onPress={() => startScan('camera')} fullWidth disabled={loading}>{loading ? 'Scanning...' : 'Take Photo'}</Btn>
+                <Btn variant="outline" onPress={() => startScan('camera')} fullWidth disabled={loading}>
+                  {loading ? 'Scanning...' : 'Take Photo'}
+                </Btn>
               )}
             </View>
             </View>
@@ -1209,11 +1174,20 @@ function OCRScanReviewSheet({ profile, categories, onClose }) {
         </View>
       )}
 
-      {!currentDraft && savedCount > 0 && (
+      {!currentDraft && (savedCount > 0 || duplicateCount > 0) && (
         <View style={styles.doneState}>
-          <Text style={{ fontSize: 48 }}>âœ…</Text>
+          <Text style={{ fontSize: 48, fontWeight: '800', color: colors.success }}>OK</Text>
           <Text style={styles.doneTitle}>Scan Review Complete</Text>
-          <Text style={{ color: colors.success, marginTop: 8 }}>{savedCount} transaction{savedCount === 1 ? '' : 's'} added</Text>
+          {savedCount > 0 && (
+            <Text style={{ color: colors.success, marginTop: 8 }}>
+              {savedCount} transaction{savedCount === 1 ? '' : 's'} added
+            </Text>
+          )}
+          {duplicateCount > 0 && (
+            <Text style={{ color: colors.textMuted, fontSize: font.sizes.sm, marginTop: 4 }}>
+              {duplicateCount} duplicate{duplicateCount === 1 ? '' : 's'} skipped
+            </Text>
+          )}
           <Btn onPress={onClose} style={{ marginTop: 20 }} fullWidth>Done</Btn>
         </View>
       )}
@@ -1431,7 +1405,7 @@ export function BudgetManagerScreen({ profile }) {
 // ─────────────────────────────────────────────
 
 export function AssistantScreen({ profile }) {
-  const [messages, setMessages] = useState([{ role: 'assistant', text: "Hi! I'm your FinSight on-device assistant. Ask about spending, budgets, imports, or savings ideas once the local model package is installed." }]);
+  const [messages, setMessages] = useState([{ role: 'assistant', text: "Hi! I'm your FinSight assistant. Ask about spending, budgets, transactions, imports, or simple finance questions." }]);
   const [input,    setInput]    = useState('');
   const [loading,  setLoading]  = useState(false);
   const [context,  setContext]  = useState({});
@@ -1448,7 +1422,7 @@ export function AssistantScreen({ profile }) {
   }, []);
 
   useEffect(() => {
-    ReportingAnalyticsService.getDashboardData(profile.id).then(d => setContext(buildAssistantContext(d)));
+    LocalAIService.getAssistantContext(profile.id).then(setContext);
     refreshAssistantStatus();
   }, [profile.id, refreshAssistantStatus]);
 
@@ -1458,7 +1432,7 @@ export function AssistantScreen({ profile }) {
 
   useEffect(() => {
     const reloadContext = () => {
-      ReportingAnalyticsService.getDashboardData(profile.id).then(d => setContext(buildAssistantContext(d)));
+      LocalAIService.getAssistantContext(profile.id).then(setContext);
     };
 
     return subscribeToDataChanges(reloadContext);
@@ -1473,7 +1447,7 @@ export function AssistantScreen({ profile }) {
         setInstallProgress(progressUpdate);
       });
       refreshAssistantStatus();
-      setMessages([{ role: 'assistant', text: "Your local AI package is installed. Native mobile inference is the next integration step, so responses still use the current scaffolded assistant flow for now." }]);
+      setMessages([{ role: 'assistant', text: 'Your local AI package is installed. I can now answer from your on-device finance data and help clean OCR merchant titles offline.' }]);
     } catch (error) {
       console.warn('Failed to install local AI model:', error);
       Alert.alert('Install Failed', error.message || 'Unable to install the local AI package.');
@@ -1486,6 +1460,10 @@ export function AssistantScreen({ profile }) {
   const send = async () => {
     if (!input.trim() || loading) return;
     const userMsg = input.trim();
+    const conversationHistory = messages
+      .filter((message) => message.text && message.text !== '...')
+      .slice(-8)
+      .map((message) => ({ role: message.role, text: message.text }));
     setInput('');
     setMessages(m => [...m, { role: 'user', text: userMsg }]);
     setLoading(true);
@@ -1493,19 +1471,20 @@ export function AssistantScreen({ profile }) {
 
     await LocalAIService.ask(userMsg, context, (partial) => {
       setMessages(m => m.map((msg, i) => i === m.length - 1 ? { ...msg, text: partial } : msg));
-    });
+    }, conversationHistory);
     setLoading(false);
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
   };
 
-  const suggestions = ['How much did I spend on food?', 'Which budget needs attention?', 'Did imports get categorized correctly?'];
+  const suggestions = ['How much did I spend on food?', 'Which budget needs attention?', 'What is cash flow?'];
+  const canSend = !!input.trim() && !loading && !installing;
 
   return (
     <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={[styles.apiKeyBanner, assistantStatus.ready ? styles.assistantReadyBanner : styles.assistantSetupBanner]}>
         <Text style={styles.apiKeyText}>On-device AI assistant</Text>
         <Text style={styles.apiKeyNote}>{assistantStatus.detail}</Text>
-        <Text style={styles.importHint}>The app now manages a downloadable local model package separately from the mobile inference runtime, keeping the app install small.</Text>
+        <Text style={styles.importHint}>Install the local assistant package for the richer offline package and OCR title cleanup. Basic assistant responses still run locally in the app.</Text>
         {!assistantStatus.ready && (
           <View style={styles.assistantActionRow}>
             <Btn onPress={installModel} disabled={installing} size="sm">
@@ -1541,17 +1520,28 @@ export function AssistantScreen({ profile }) {
         ))}
       </ScrollView>
 
-      <View style={styles.inputBar}>
-        <TextInput
-          value={input} onChangeText={setInput}
-          placeholder={assistantStatus.ready ? 'Ask your on-device assistant about spending or imports...' : 'Install the local AI package to unlock on-device chat...'}
-          placeholderTextColor={colors.textMuted}
-          multiline
-          style={styles.chatInput}
-          onSubmitEditing={send}
-          editable={assistantStatus.ready && !installing}
-        />
-        <TouchableOpacity onPress={send} disabled={loading || !input.trim() || !assistantStatus.ready || installing} style={[styles.sendBtn, (loading || !input.trim() || !assistantStatus.ready || installing) && { opacity: 0.4 }]}>
+        <View style={styles.inputBar}>
+          <View style={styles.chatInputFrame}>
+          <TextInput
+            value={input} onChangeText={setInput}
+            placeholder='Ask about spending, transactions, budgets, or a simple finance question...'
+            placeholderTextColor={colors.textMuted}
+            multiline
+            style={[styles.chatInput, Platform.OS === 'windows' && styles.windowsTextInput]}
+            onSubmitEditing={send}
+            onKeyPress={Platform.OS === 'windows' ? (event) => {
+              if (event.nativeEvent.key === 'Enter' && input.trim() && !loading && !installing) {
+                event.preventDefault?.();
+                send();
+              }
+            } : undefined}
+            submitBehavior={Platform.OS === 'windows' ? 'submit' : 'newline'}
+            returnKeyType="send"
+            enablesReturnKeyAutomatically
+            editable={!installing}
+          />
+          </View>
+        <TouchableOpacity onPress={send} disabled={!canSend} style={[styles.sendBtn, !canSend && { opacity: 0.4 }]}>
           <Text style={{ color: '#fff', fontWeight: font.weights.bold }}>Send</Text>
         </TouchableOpacity>
       </View>
@@ -1566,6 +1556,7 @@ export function ProfileScreen({ profile, onLogout }) {
   const [stats, setStats] = useState({ txCount: 0, budgetCount: 0 });
   const [aiStatus, setAiStatus] = useState({ state: 'not-installed', ready: false, detail: 'Checking local AI package...' });
   const [aiBusy, setAiBusy] = useState(false);
+  const [aiProgress, setAiProgress] = useState(null);
 
   useEffect(() => {
     const loadStats = () => {
@@ -1601,8 +1592,11 @@ export function ProfileScreen({ profile, onLogout }) {
 
   const installAi = async () => {
     setAiBusy(true);
+    setAiProgress({ progress: 0, detail: 'Preparing local AI package...' });
     try {
-      await LocalAIService.installRecommendedModel();
+      await LocalAIService.installRecommendedModel((progressUpdate) => {
+        setAiProgress(progressUpdate);
+      });
       refreshAiStatus();
     } catch (error) {
       Alert.alert('Install Failed', error.message || 'Unable to install the local AI package.');
@@ -1680,6 +1674,12 @@ export function ProfileScreen({ profile, onLogout }) {
             <Btn variant="outline" onPress={removeAi} disabled={aiBusy} fullWidth>{aiBusy ? 'Removing...' : 'Remove Local AI'}</Btn>
           )}
         </View>
+        {!!aiProgress && (
+          <View style={{ marginTop: 12 }}>
+            <ProgressBar value={aiProgress.progress || 0} max={1} color={colors.accent} />
+            <Text style={[styles.importHint, { marginTop: 6 }]}>{aiProgress.detail}</Text>
+          </View>
+        )}
       </Card>
 
       <Card style={{ marginBottom: 16 }}>
@@ -1863,6 +1863,7 @@ const styles = StyleSheet.create({
   msgAssistant:      { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderBottomLeftRadius: 4 },
   msgText:           { color: colors.text, fontSize: font.sizes.md, lineHeight: 21 },
   inputBar:          { flexDirection: 'row', gap: 10, padding: 12, borderTopWidth: 1, borderColor: colors.border, backgroundColor: colors.bg },
+  chatInputFrame:    { flex: 1, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md },
   chatInput:         { flex: 1, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: 12, color: colors.text, fontSize: font.sizes.md, maxHeight: 100 },
   sendBtn:           { backgroundColor: colors.accent, borderRadius: radius.md, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
   suggestionChip:    { backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border, borderRadius: radius.full, paddingHorizontal: 14, paddingVertical: 8 },
@@ -1873,4 +1874,5 @@ const styles = StyleSheet.create({
   statsRow:          { flexDirection: 'row', gap: 40, marginTop: 16 },
   statCell:          { alignItems: 'center' },
   statBig:           { fontSize: font.sizes.xxl, fontWeight: font.weights.bold, color: colors.text },
+  windowsTextInput:  { backgroundColor: 'transparent', borderWidth: 0 },
 });

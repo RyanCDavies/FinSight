@@ -6,6 +6,14 @@ const MANIFEST_FILE = 'ai/manifest.json';
 const STATUS_FILE = 'ai/status.json';
 const TEMP_DOWNLOAD_FILE = 'ai/temp/model.download';
 
+function currentPackagePath(metadata) {
+  return metadata ? `ai/current/${metadata.fileName}` : null;
+}
+
+function previousPackagePath(metadata) {
+  return metadata ? `ai/previous/${metadata.fileName}` : null;
+}
+
 export const AIStorage = {
   paths: {
     rootDir: 'ai',
@@ -58,16 +66,22 @@ export const AIStorage = {
   },
 
   async removeCurrent() {
+    const existingCurrent = await this.readCurrentMetadata();
+    if (existingCurrent) {
+      await writeJsonFile(currentPackagePath(existingCurrent), null);
+    }
     await writeJsonFile(CURRENT_METADATA_FILE, null);
     await this.writeStatus({ state: 'not-installed' });
   },
 
-  async promoteTempToCurrent(_tempModelFile, metadata) {
+  async promoteTempToCurrent(tempModelFile, metadata) {
     const existingCurrent = await this.readCurrentMetadata();
     if (existingCurrent) {
       await this.writePreviousMetadata(existingCurrent);
+      await writeJsonFile(previousPackagePath(existingCurrent), await readJsonFile(currentPackagePath(existingCurrent), null));
     }
 
+    await writeJsonFile(currentPackagePath(metadata), await readJsonFile(tempModelFile, null));
     await this.writeCurrentMetadata(metadata);
     await this.writeStatus({
       state: 'installed',
@@ -85,5 +99,16 @@ export const AIStorage = {
     return TEMP_DOWNLOAD_FILE;
   },
 
-  async deleteTemp() {},
+  async writeTempPackage(_model, payload) {
+    await writeJsonFile(TEMP_DOWNLOAD_FILE, payload);
+    return TEMP_DOWNLOAD_FILE;
+  },
+
+  async readCurrentPackage(metadata) {
+    return readJsonFile(currentPackagePath(metadata), null);
+  },
+
+  async deleteTemp() {
+    await writeJsonFile(TEMP_DOWNLOAD_FILE, null);
+  },
 };

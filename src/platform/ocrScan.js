@@ -1,5 +1,4 @@
 import * as ImagePicker from 'expo-image-picker';
-import TextRecognition from '@react-native-ml-kit/text-recognition';
 
 async function ensurePermission(mode) {
   if (mode === 'camera') {
@@ -40,7 +39,21 @@ export async function scanTransactionImageAsync(mode = 'library') {
   }
 
   const asset = result.assets[0];
-  const recognized = await TextRecognition.recognize(asset.uri);
+  let text = '';
+
+  try {
+    const { recognizeText } = await import('@infinitered/react-native-mlkit-text-recognition');
+    const recognized = await recognizeText(asset.uri);
+    text = String(recognized?.text || '').trim();
+  } catch (error) {
+    const message = String(error?.message || '');
+    if (/native module|cannot find native module|RNMLKitTextRecognition|development build|expo go/i.test(message)) {
+      throw new Error(
+        'Receipt scanning requires a native Expo development build so the on-device OCR module can be included. Expo Go does not bundle this scanner.'
+      );
+    }
+    throw error;
+  }
 
   return {
     imageUri: asset.uri,
@@ -48,6 +61,6 @@ export async function scanTransactionImageAsync(mode = 'library') {
     width: asset.width || null,
     height: asset.height || null,
     mode,
-    text: String(recognized?.text || '').trim(),
+    text,
   };
 }

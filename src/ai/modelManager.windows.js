@@ -1,30 +1,158 @@
 import { AIManifest } from './manifest';
+import { buildBootstrapPackage } from './packageBuilder';
 import { AISettings } from './settings';
 import { AIStorage } from './storage';
+import { LocalLLMBridge } from '../platform/localLLM';
 
 const runtime = globalThis.__finsightAiModelManager || (globalThis.__finsightAiModelManager = {
   currentInstall: null,
 });
 
+function manifestSupportsManagedWindowsDownloads(manifest) {
+  return Array.isArray(manifest?.models) && manifest.models.some((model) => {
+    return Array.isArray(model?.windowsPackage?.files) && model.windowsPackage.files.length > 0;
+  });
+}
+
+async function ensureCurrentManifest() {
+  const manifest = await AIStorage.readManifest();
+  if (manifestSupportsManagedWindowsDownloads(manifest)) {
+    return manifest;
+  }
+
+  const defaultManifest = AIManifest.getDefaultManifest();
+  await AIStorage.writeManifest(defaultManifest);
+  return defaultManifest;
+}
+
 function emitProgress(callback, progress, detail) {
   callback?.({ progress, detail });
 }
 
-async function installStubModel(model, onProgress) {
-  emitProgress(onProgress, 0.35, 'Preparing local model package...');
-  await new Promise((resolve) => setTimeout(resolve, 250));
-  emitProgress(onProgress, 0.7, 'Verifying local model package...');
-  await new Promise((resolve) => setTimeout(resolve, 250));
-  return AIStorage.getTempModelFile(model);
+async function updateProgress(modelId, onProgress, progress, detail) {
+  await AIStorage.writeStatus({ state: 'downloading', progress, modelId, detail });
+  emitProgress(onProgress, progress, detail);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getWindowsPackage(model) {
+  return model?.windowsPackage && Array.isArray(model.windowsPackage.files)
+    ? model.windowsPackage
+    : null;
+}
+
+async function downloadManagedWindowsModel(model, windowsPackage, onProgress) {
+  const installDirectoryName = windowsPackage.installDirectoryName || `${model.id}-${model.version}`;
+  await updateProgress(model.id, onProgress, 0.1, 'Preparing the Windows local model directory...');
+  const modelDirectory = await LocalLLMBridge.prepareModelDownload(installDirectoryName);
+
+  if (!modelDirectory) {
+    throw new Error('Unable to prepare the managed Windows model directory.');
+  }
+
+  const files = windowsPackage.files || [];
+  const totalBytes = files.reduce((sum, file) => sum + Number(file.sizeBytes || 0), 0);
+  let completedBytes = 0;
+
+  for (let index = 0; index < files.length; index += 1) {
+    const file = files[index];
+    if (!file?.url || !file?.relativePath) {
+      throw new Error('The Windows model package manifest is missing a file URL or relative path.');
+    }
+
+    const fileLabel = file.relativePath.split(/[\\/]/).pop() || `file ${index + 1}`;
+    const boundedProgress = 0.16 + ((totalBytes ? completedBytes / totalBytes : index / files.length) * 0.56);
+    await updateProgress(model.id, onProgress, boundedProgress, `Downloading ${fileLabel}...`);
+    await LocalLLMBridge.downloadModelAsset(file.url, installDirectoryName, file.relativePath);
+    completedBytes += Number(file.sizeBytes || 0);
+  }
+
+  await updateProgress(model.id, onProgress, 0.76, 'Validating the downloaded Windows local model...');
+  const configuredStatus = await LocalLLMBridge.configureModelDirectory(modelDirectory);
+  await sleep(120);
+
+  return {
+    modelDirectory,
+    configuredStatus,
+    managed: true,
+    installDirectoryName,
+  };
+}
+
+async function installBootstrapModel(model, onProgress) {
+  const windowsPackage = getWindowsPackage(model);
+  if (windowsPackage?.files?.length) {
+    const downloaded = await downloadManagedWindowsModel(model, windowsPackage, onProgress);
+    const basePackage = buildBootstrapPackage(model);
+    const payload = {
+      ...basePackage,
+      providers: {
+        ...basePackage.providers,
+        windows: {
+          ...basePackage.providers.windows,
+          configured: !!downloaded.configuredStatus.configured,
+          modelDirectory: downloaded.modelDirectory,
+          managed: true,
+          installDirectoryName: downloaded.installDirectoryName,
+          files: windowsPackage.files.map((file) => ({
+            relativePath: file.relativePath,
+            sizeBytes: file.sizeBytes || null,
+            sha256: file.sha256 || null,
+            url: file.url,
+          })),
+        },
+      },
+    };
+    const tempFile = await AIStorage.writeTempPackage(model, payload);
+    await updateProgress(model.id, onProgress, 0.84, 'Verifying the downloaded Windows local model...');
+    await sleep(180);
+    return tempFile;
+  }
+
+  await updateProgress(model.id, onProgress, 0.12, 'Selecting a Windows local model directory...');
+  const existingStatus = await LocalLLMBridge.getBackendStatus();
+  let modelDirectory = existingStatus.modelDirectory || null;
+
+  if (!modelDirectory) {
+    modelDirectory = await LocalLLMBridge.pickModelDirectory();
+  }
+
+  if (!modelDirectory) {
+    throw new Error('No Windows local model directory was selected.');
+  }
+
+  const configuredStatus = await LocalLLMBridge.configureModelDirectory(modelDirectory);
+  await updateProgress(model.id, onProgress, 0.24, 'Validating ONNX Runtime GenAI model folder...');
+  await sleep(180);
+  await updateProgress(model.id, onProgress, 0.42, 'Saving Windows local AI configuration...');
+  await sleep(220);
+  const basePackage = buildBootstrapPackage(model);
+  const payload = {
+    ...basePackage,
+    providers: {
+      ...basePackage.providers,
+      windows: {
+        ...basePackage.providers.windows,
+        configured: !!configuredStatus.configured,
+        modelDirectory,
+      },
+    },
+  };
+  const tempFile = await AIStorage.writeTempPackage(model, payload);
+  await updateProgress(model.id, onProgress, 0.7, 'Registering Windows local model...');
+  await sleep(180);
+  await updateProgress(model.id, onProgress, 0.84, 'Verifying Windows local model configuration...');
+  await sleep(180);
+  return tempFile;
 }
 
 export const AIModelManager = {
   async initialize() {
     await AIStorage.ensureLayout();
-    const manifest = await AIStorage.readManifest();
-    if (!manifest) {
-      await AIStorage.writeManifest(AIManifest.getDefaultManifest());
-    }
+    await ensureCurrentManifest();
     return AIStorage.readStatus();
   },
 
@@ -63,7 +191,7 @@ export const AIModelManager = {
 
   async getManifest() {
     await this.initialize();
-    return (await AIStorage.readManifest()) || AIManifest.getDefaultManifest();
+    return ensureCurrentManifest();
   },
 
   async getRecommendedModel() {
@@ -81,35 +209,40 @@ export const AIModelManager = {
     if (!model) {
       throw new Error('Requested model was not found in the manifest.');
     }
+    const windowsPackage = getWindowsPackage(model);
 
     runtime.currentInstall = { cancelled: false, modelId };
     await AIStorage.writeStatus({ state: 'downloading', progress: 0, modelId });
     emitProgress(onProgress, 0.05, 'Starting download...');
 
     try {
-      const tempFile = await installStubModel(model, onProgress);
+      const tempFile = await installBootstrapModel(model, onProgress);
 
       if (runtime.currentInstall?.cancelled) {
         await AIStorage.writeStatus({ state: 'not-installed' });
         throw new Error('Install cancelled.');
       }
 
-      emitProgress(onProgress, 0.9, 'Finalizing install...');
+      await updateProgress(model.id, onProgress, 0.92, 'Finalizing install...');
       const metadata = {
         id: model.id,
         name: model.name,
         version: model.version,
-        runtime: model.runtime,
-        sizeBytes: model.sizeBytes,
+        runtime: 'windows-native-onnx',
+        sizeBytes: windowsPackage?.files?.length
+          ? windowsPackage.files.reduce((sum, file) => sum + Number(file.sizeBytes || 0), 0)
+          : model.sizeBytes,
         fileName: model.fileName,
         installedAt: new Date().toISOString(),
         checksum: model.checksum,
         sourceUrl: model.url,
+        capabilities: ['chat', 'ocr-title-cleanup'],
       };
 
       await AIStorage.promoteTempToCurrent(tempFile, metadata);
       await AISettings.setEnabled(true);
       await AISettings.setInstalledModelRef(model.id, model.version);
+      await AIStorage.writeStatus({ state: 'installed', modelId: model.id, version: model.version, detail: 'Gemma 3n local package installed.' });
       emitProgress(onProgress, 1, 'Install complete.');
       return metadata;
     } finally {
