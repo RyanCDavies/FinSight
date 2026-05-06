@@ -534,98 +534,6 @@ export function DashboardScreen({ profile, navigation }) {
         </View>
       )}
 
-      {/* Budget Status */}
-      {budgets.length > 0 && (
-        <Card style={styles.sectionCard}>
-          <SectionHeader title="Budget Status" action="View All →" onAction={() => navigation.navigate('Budgets')} />
-          {budgets.slice(0, 3).map(b => {
-            const cat = cats.find(c => c.id === b.category_id);
-            return (
-              <View key={b.id} style={{ marginBottom: 14 }}>
-                <View style={styles.budgetRow}>
-                  <Text style={styles.budgetName}>{getCategoryLabel(cat) || b.category_id}</Text>
-                  <Text style={styles.budgetAmt}>${b.spent.toFixed(0)} / ${b.limit_amount}</Text>
-                </View>
-                <ProgressBar value={b.spent} max={b.limit_amount} color={cat?.color || colors.accent} />
-              </View>
-            );
-          })}
-        </Card>
-      )}
-
-      {/* Top Spending */}
-      {topCategories.length > 0 && (
-        <Card style={styles.sectionCard}>
-          <SectionHeader title="Top Spending" />
-          {topCategories.map(([catId, amt]) => {
-            const cat = cats.find(c => c.id === catId);
-            const pct = totalSpend ? (amt / totalSpend * 100).toFixed(0) : 0;
-            return (
-              <View key={catId} style={styles.topSpendRow}>
-                <View style={[styles.catIcon, { backgroundColor: `${cat?.color || colors.accent}20` }]}>
-                  <Text style={{ fontSize: 18 }}>{cat?.icon || '📦'}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <Text style={styles.catName}>{cat?.name || catId}</Text>
-                    <Text style={styles.catAmt}>${amt.toFixed(0)}</Text>
-                  </View>
-                  <ProgressBar value={amt} max={totalSpend} color={cat?.color || colors.accent} />
-                </View>
-                <Text style={styles.pctLabel}>{pct}%</Text>
-              </View>
-            );
-          })}
-        </Card>
-      )}
-      {topCategories.length === 0 && (
-        <Card style={styles.sectionCard}>
-          <SectionHeader title="Top Spending" />
-          <Text style={styles.emptySectionText}>No spending recorded for this month yet.</Text>
-        </Card>
-      )}
-
-      {/* AI Insights */}
-      {recommendations.length > 0 && (
-        <Card style={styles.sectionCard}>
-          <SectionHeader title="💡 AI Insights" />
-          {recommendations.map((rec, i) => (
-            <View key={i} style={[styles.recRow, i < recommendations.length - 1 && styles.divider]}>
-              <Text style={{ fontSize: 18 }}>{rec.icon}</Text>
-              <Text style={styles.recText}>{rec.text}</Text>
-            </View>
-          ))}
-        </Card>
-      )}
-      {recommendations.length === 0 && (
-        <Card style={styles.sectionCard}>
-          <SectionHeader title="AI Insights" />
-          <Text style={styles.emptySectionText}>Add a bit more spending history and FinSight will surface personalized insights here.</Text>
-        </Card>
-      )}
-
-      {/* Zombie Subscriptions */}
-      {subscriptions.length > 0 && (
-        <Card style={styles.sectionCard}>
-          <SectionHeader title="🧟 Zombie Subscriptions" />
-          {subscriptions.slice(0, 3).map((s, i) => (
-            <View key={i} style={[styles.subRow, i < subscriptions.length - 1 && styles.divider]}>
-              <View>
-                <Text style={styles.subMerchant}>{s.merchant}</Text>
-                <Text style={styles.subMeta}>{s.frequency} · last seen {s.last_seen?.slice(0, 10)}</Text>
-              </View>
-              <Badge color={colors.warning}>${Math.abs(s.amount).toFixed(2)}{s.billing_suffix || (s.frequency === 'weekly' ? '/wk' : '/mo')}</Badge>
-            </View>
-          ))}
-        </Card>
-      )}
-      {subscriptions.length === 0 && (
-        <Card style={styles.sectionCard}>
-          <SectionHeader title="Zombie Subscriptions" />
-          <Text style={styles.emptySectionText}>No recurring charges stand out yet.</Text>
-        </Card>
-      )}
-
       {/* Forecasts */}
       {forecasts.length > 0 && (
         <Card style={styles.sectionCard}>
@@ -645,6 +553,101 @@ export function DashboardScreen({ profile, navigation }) {
         <Card style={styles.sectionCard}>
           <SectionHeader title="Spending Forecast" />
           <Text style={styles.emptySectionText}>Forecasts will appear once there is enough monthly history to model future spending.</Text>
+        </Card>
+      )}
+
+      {/* Top Spending */}
+      {topCategories.length > 0 && (
+        <Card style={styles.sectionCard}>
+          <SectionHeader title="Top Spending" />
+          {topCategories.map(([catId, amt]) => {
+            const cat = cats.find(c => c.id === catId);
+            const pct = totalSpend ? (amt / totalSpend * 100).toFixed(0) : 0;
+            return (
+              <View key={catId} style={styles.topSpendRow}>
+                <View style={[styles.catIcon, { backgroundColor: `${cat?.color || colors.accent}20` }]}>
+                  <Text style={{ fontSize: 18 }}>{cat?.icon || '📦'}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <Text style={styles.catName}>{cat?.name || catId}</Text>
+                    <Text style={styles.catAmt}>${Number(amt).toFixed(0)}</Text>
+                  </View>
+                  <ProgressBar value={amt} max={totalSpend} color={cat?.color || colors.accent} />
+                </View>
+                <Text style={styles.pctLabel}>{pct}%</Text>
+              </View>
+            );
+          })}
+        </Card>
+      )}
+      {topCategories.length === 0 && (
+        <Card style={styles.sectionCard}>
+          <SectionHeader title="Top Spending" />
+          <Text style={styles.emptySectionText}>No spending recorded for this month yet.</Text>
+        </Card>
+      )}
+
+      {/* Zombie Subscriptions */}
+      {subscriptions.length > 0 && (
+        <Card style={styles.sectionCard}>
+          <SectionHeader title="🧟 Zombie Subscriptions" />
+          {subscriptions.slice(0, 3).map((s, i) => (
+            <React.Fragment key={i}>
+              <View style={styles.subRow}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.subMerchant}>{s.merchant}</Text>
+                  <Text style={styles.subMeta}>{s.frequency} · last seen {s.last_seen?.slice(0, 10)}</Text>
+                </View>
+                <Badge color={colors.warning}>${Math.abs(s.amount).toFixed(2)}{s.billing_suffix || (s.frequency === 'weekly' ? '/wk' : '/mo')}</Badge>
+              </View>
+              {i < subscriptions.length - 1 && <View style={styles.divider} />}
+            </React.Fragment>
+          ))}
+        </Card>
+      )}
+      {subscriptions.length === 0 && (
+        <Card style={styles.sectionCard}>
+          <SectionHeader title="Zombie Subscriptions" />
+          <Text style={styles.emptySectionText}>No recurring charges stand out yet.</Text>
+        </Card>
+      )}
+
+      {/* Budget Status */}
+      {budgets.length > 0 && (
+        <Card style={styles.sectionCard}>
+          <SectionHeader title="Budget Status" action="View All →" onAction={() => navigation.navigate('Budgets')} />
+          {budgets.slice(0, 3).map(b => {
+            const cat = cats.find(c => c.id === b.category_id);
+            return (
+              <View key={b.id} style={{ marginBottom: 14 }}>
+                <View style={styles.budgetRow}>
+                  <Text style={styles.budgetName}>{getCategoryLabel(cat) || b.category_id}</Text>
+                  <Text style={styles.budgetAmt}>${b.spent.toFixed(0)} / ${b.limit_amount}</Text>
+                </View>
+                <ProgressBar value={b.spent} max={b.limit_amount} color={cat?.color || colors.accent} />
+              </View>
+            );
+          })}
+        </Card>
+      )}
+
+      {/* AI Insights */}
+      {recommendations.length > 0 && (
+        <Card style={styles.sectionCard}>
+          <SectionHeader title="💡 AI Insights" />
+          {recommendations.map((rec, i) => (
+            <View key={i} style={[styles.recRow, i < recommendations.length - 1 && styles.divider]}>
+              <Text style={{ fontSize: 18 }}>{rec.icon}</Text>
+              <Text style={styles.recText}>{rec.text}</Text>
+            </View>
+          ))}
+        </Card>
+      )}
+      {recommendations.length === 0 && (
+        <Card style={styles.sectionCard}>
+          <SectionHeader title="AI Insights" />
+          <Text style={styles.emptySectionText}>Add a bit more spending history and FinSight will surface personalized insights here.</Text>
         </Card>
       )}
     </ScrollView>
@@ -1552,6 +1555,9 @@ export function AssistantScreen({ profile }) {
     const session = getAssistantSession(profile.id);
     generationIdRef.current = session.generationId || 0;
     setMessages(session.messages);
+    // Only restore loading=true if the generation is still genuinely in-flight
+    // (activeScreenRef is false here since we're syncing on focus, session.loading
+    // will have been cleared by the finally block when the async finished off-screen)
     setLoading(!!session.loading);
   }, [profile.id]);
 
@@ -1584,14 +1590,21 @@ export function AssistantScreen({ profile }) {
 
   useFocusEffect(useCallback(() => {
     activeScreenRef.current = true;
-    syncAssistantStateFromSession();
     refreshAssistantStatus();
+
+    // Re-sync messages and loading state from the session store
+    const session = getAssistantSession(profile.id);
+    generationIdRef.current = session.generationId || 0;
+    setMessages([...session.messages]);
+    // If the generation finished while we were away, session.loading is already
+    // false (cleared by the finally block), so this correctly unlocks the input.
+    setLoading(!!session.loading);
 
     return () => {
       activeScreenRef.current = false;
       releaseAssistantUiWork();
     };
-  }, [refreshAssistantStatus, releaseAssistantUiWork, syncAssistantStateFromSession]));
+  }, [profile.id, refreshAssistantStatus, releaseAssistantUiWork]));
 
   useEffect(() => {
     const reloadContext = () => {
@@ -1650,38 +1663,33 @@ export function AssistantScreen({ profile }) {
     try {
       await LocalAIService.ask(userMsg, context, (partial) => {
         const latestSession = getAssistantSession(profile.id);
-        if ((latestSession.generationId || 0) !== generationId) {
-          return;
-        }
+        if ((latestSession.generationId || 0) !== generationId) return;
+
         const resolvedMessages = latestSession.messages.map((msg, i) => (
           i === latestSession.messages.length - 1 ? { ...msg, text: partial } : msg
         ));
+        // Always update the session store so returning to tab shows latest text
         latestSession.messages = resolvedMessages;
         latestSession.loading = false;
 
-        if (!isMountedRef.current || !activeScreenRef.current || generationIdRef.current !== generationId) {
-          return;
-        }
+        // Only push to React state if the screen is currently visible
+        if (!isMountedRef.current || !activeScreenRef.current || generationIdRef.current !== generationId) return;
 
         setMessages(resolvedMessages);
+        setLoading(false);
       }, conversationHistory);
     } finally {
       const latestSession = getAssistantSession(profile.id);
-      if ((latestSession.generationId || 0) !== generationId) {
-        return;
-      }
+      // Always clear session loading so tab-return sync sees the correct state
       latestSession.loading = false;
 
-      if (!isMountedRef.current || generationIdRef.current !== generationId) {
-        return;
-      }
+      if (!isMountedRef.current || generationIdRef.current !== generationId) return;
 
-      setLoading(false);
+      // Only update React state if the screen is active to avoid navigation freeze
       if (activeScreenRef.current) {
+        setLoading(false);
         scrollTimeoutRef.current = setTimeout(() => {
-          if (!isMountedRef.current || !activeScreenRef.current || generationIdRef.current !== generationId) {
-            return;
-          }
+          if (!isMountedRef.current || !activeScreenRef.current || generationIdRef.current !== generationId) return;
           scrollRef.current?.scrollToEnd({ animated: true });
         }, 100);
       }
@@ -2066,9 +2074,9 @@ const styles = StyleSheet.create({
   privacyTitle:      { fontSize: font.sizes.sm, fontWeight: font.weights.medium, color: colors.text, flexShrink: 1 },
   privacyDesc:       { fontSize: font.sizes.xs, color: colors.textMuted, marginTop: 4, lineHeight: Platform.OS === 'windows' ? 18 : 16, flexShrink: 1 },
   recText:           { flex: 1, fontSize: font.sizes.sm, color: colors.textSecondary, lineHeight: 20 },
-  subRow:            { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 },
-  subMerchant:       { fontSize: font.sizes.sm, fontWeight: font.weights.medium, color: colors.text, textTransform: 'capitalize' },
-  subMeta:           { fontSize: font.sizes.xs, color: colors.textMuted, marginTop: 2 },
+  subRow:            { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, gap: 12 },
+  subMerchant:       { fontSize: font.sizes.sm, fontWeight: font.weights.medium, color: colors.text, textTransform: 'capitalize', flexShrink: 1 },
+  subMeta:           { fontSize: font.sizes.xs, color: colors.textMuted, marginTop: 2, flexShrink: 1 },
   forecastGrid:      { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   forecastCell:      { flex: 1, minWidth: '45%', backgroundColor: colors.surfaceAlt, borderRadius: radius.md, padding: 12 },
   forecastCat:       { fontSize: font.sizes.xs, color: colors.textMuted },
