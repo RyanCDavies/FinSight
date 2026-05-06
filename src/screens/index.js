@@ -9,6 +9,7 @@ import {
   Platform, ActivityIndicator,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { colors, radius, spacing, font } from '../theme';
 import { Card, Btn, Input, Badge, ProgressBar, ScreenLoader, SectionHeader, BottomSheet, CategoryPill } from '../components';
 import {
@@ -19,6 +20,22 @@ import { saveSession, clearSession, getDB } from '../db/database';
 import { emitDataChanged, subscribeToDataChanges } from '../db/changeEvents';
 import { addCsvDropListener, pickCsvTextAsync, setCsvDropEnabled } from '../platform/csvImport';
 import { scanTransactionImageAsync } from '../platform/ocrScan';
+
+const brandMark = require('../../assets/ico.png');
+const assistantSessionStore = globalThis.__finsightAssistantSessions || (globalThis.__finsightAssistantSessions = {});
+
+function getAssistantSession(profileId) {
+  const key = String(profileId || 'default');
+  if (!assistantSessionStore[key]) {
+    assistantSessionStore[key] = {
+      messages: [{ role: 'assistant', text: "Hi! I'm your FinSight assistant. Ask about spending, budgets, transactions, imports, or simple finance questions." }],
+      loading: false,
+      generationId: 0,
+    };
+  }
+
+  return assistantSessionStore[key];
+}
 
 function isTextIcon(icon) {
   return /^[A-Za-z][A-Za-z0-9\s&/-]*$/.test(String(icon || '').trim());
@@ -111,6 +128,10 @@ function createEmptyTransactionForm() {
   return { date: getTodayIsoDate(), merchant: '', amount: '', category_id: '', note: '' };
 }
 
+function getFloatingTabBarSpacing(tabBarHeight) {
+  return tabBarHeight + 28;
+}
+
 function validateTransactionForm(form) {
   if (!form.date.trim()) {
     return { title: 'Missing Field', message: 'Please enter a date.' };
@@ -192,6 +213,8 @@ function formatScaleMoney(amount) {
   return amount >= 1000 ? `$${(amount / 1000).toFixed(amount % 1000 === 0 ? 0 : 1)}k` : `$${amount}`;
 }
 
+const CHART_DRAWABLE_HEIGHT = 176;
+
 function getChartGridStep(maxValue) {
   if (maxValue <= 1000) return 250;
   if (maxValue <= 2000) return 500;
@@ -199,14 +222,14 @@ function getChartGridStep(maxValue) {
 }
 
 function getChartScale(maxValue) {
+  const intervals = 3;
   const step = getChartGridStep(maxValue);
   const roundedTop = Math.ceil((maxValue || 1) / step) * step;
-  const topLine = Math.max(step * 3, roundedTop);
-  const gridValues = [topLine - step * 3, topLine - step * 2, topLine - step, topLine].map((value) => Math.max(0, value));
-  const baseline = gridValues[0];
+  const topLine = Math.max(step * intervals, roundedTop);
+  const gridValues = Array.from({ length: intervals + 1 }, (_, index) => Math.round((topLine / intervals) * index));
 
   return {
-    baseline,
+    baseline: 0,
     chartMax: topLine,
     gridValues,
   };
@@ -217,6 +240,11 @@ function CashFlowChartCard({ monthlyTrend, totalSpend, totalIncome, lastMonthSpe
   const [activeMonthKey, setActiveMonthKey] = useState(null);
   const chartColor = mode === 'spend' ? colors.danger : colors.success;
   const activeBarColor = mode === 'spend' ? '#f87171' : '#34d399';
+  const currentMonthStartLabel = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
   const values = monthlyTrend.map((month) => (mode === 'spend' ? month.spend : month.income));
   const maxValue = Math.max(...values, 0);
   const { baseline, chartMax, gridValues } = getChartScale(maxValue);
@@ -229,30 +257,53 @@ function CashFlowChartCard({ monthlyTrend, totalSpend, totalIncome, lastMonthSpe
 
   return (
     <Card style={styles.heroCard}>
-      <View style={styles.heroHeaderRow}>
-        <View style={{ flex: 1 }}>
+      <View style={styles.heroHeader}>
+        <View style={styles.heroHeaderTextBlock}>
           <Text style={styles.heroLabel}>6-MONTH CASH FLOW</Text>
           <Text style={styles.heroSubLabel}>
-            {mode === 'spend' ? 'Monthly spending over the last 6 months' : 'Monthly income over the last 6 months'}
+            {mode === 'spend'
+              ? `Spending since ${currentMonthStartLabel}.`
+              : `Income since ${currentMonthStartLabel}.`}
           </Text>
         </View>
+        
+        <View style={styles.heroAmountRow}>
+          <Text style={styles.heroAmount}>{formatMoney(currentValue)}</Text>
+          {change !== null && (
+            <Badge color={change > 0 ? (mode === 'spend' ? colors.danger : colors.success) : (mode === 'spend' ? colors.success : colors.danger)}>
+              {change > 0 ? '+' : '-'}{Math.abs(change).toFixed(1)}%
+            </Badge>
+          )}
+        </View>
+        
         <View style={styles.heroToggle}>
-          <Pressable onPress={() => setMode('spend')} style={[styles.heroToggleChip, mode === 'spend' && styles.heroToggleChipActive]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ selected: mode === 'spend' }}
+            focusable={Platform.OS === 'windows'}
+            onPress={() => setMode('spend')}
+            style={[styles.heroToggleChip, mode === 'spend' && styles.heroToggleChipActive]}
+          >
             <Text style={[styles.heroToggleText, mode === 'spend' && styles.heroToggleTextActive]}>Spending</Text>
           </Pressable>
-          <Pressable onPress={() => setMode('income')} style={[styles.heroToggleChip, mode === 'income' && styles.heroToggleChipActive]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ selected: mode === 'income' }}
+            focusable={Platform.OS === 'windows'}
+            onPress={() => setMode('income')}
+            style={[styles.heroToggleChip, mode === 'income' && styles.heroToggleChipActive]}
+          >
             <Text style={[styles.heroToggleText, mode === 'income' && styles.heroToggleTextActive]}>Income</Text>
           </Pressable>
         </View>
       </View>
 
-      <View style={styles.heroAmountRow}>
-        <Text style={styles.heroAmount}>{formatMoney(currentValue)}</Text>
-        {change !== null && (
-          <Badge color={change > 0 ? (mode === 'spend' ? colors.danger : colors.success) : (mode === 'spend' ? colors.success : colors.danger)}>
-            {change > 0 ? '+' : '-'}{Math.abs(change).toFixed(1)}%
-          </Badge>
-        )}
+      <View style={styles.heroAmountBlock}>
+        
+
+        <Text style={styles.heroAmountCaption}>
+          {mode === 'spend' ? 'Month-to-date total. Bars show the last 6 months.' : 'Month-to-date total. Bars show the last 6 months.'}
+        </Text>
       </View>
 
       <View style={styles.chartWrap}>
@@ -273,23 +324,30 @@ function CashFlowChartCard({ monthlyTrend, totalSpend, totalIncome, lastMonthSpe
               const value = mode === 'spend' ? month.spend : month.income;
               const isActive = month.key === activeMonthKey;
               const normalizedValue = Math.max(value - baseline, 0);
-              const barHeight = normalizedValue > 0 ? Math.max(12, (normalizedValue / chartRange) * 136) : 6;
+              const barHeight = normalizedValue > 0
+                ? Math.max(10, (normalizedValue / chartRange) * CHART_DRAWABLE_HEIGHT)
+                : 6;
 
               return (
                 <View key={month.key} style={styles.chartColumn}>
                   <View style={styles.chartBarSlot}>
-                    {isActive && (
-                      <View style={styles.chartTooltip} pointerEvents="none">
-                        <Text style={styles.chartTooltipMonth}>{month.fullLabel}</Text>
-                        <Text style={styles.chartTooltipValue}>{formatMoney(value)}</Text>
-                      </View>
-                    )}
                     <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`${month.fullLabel} ${mode === 'spend' ? 'spending' : 'income'} ${formatMoney(value)}`}
+                      focusable={Platform.OS === 'windows'}
                       onPress={() => setActiveMonthKey((current) => (current === month.key ? null : month.key))}
+                      onFocus={Platform.OS === 'windows' ? () => setActiveMonthKey(month.key) : undefined}
+                      onBlur={Platform.OS === 'windows' ? () => setActiveMonthKey((current) => (current === month.key ? null : current)) : undefined}
                       onHoverIn={Platform.OS === 'windows' ? () => setActiveMonthKey(month.key) : undefined}
                       onHoverOut={Platform.OS === 'windows' ? () => setActiveMonthKey(null) : undefined}
                       style={styles.chartBarPressable}
                     >
+                      {isActive && (
+                        <View style={[styles.chartTooltip, { bottom: barHeight + 10 }]} pointerEvents="none">
+                          <Text style={styles.chartTooltipMonth}>{month.fullLabel}</Text>
+                          <Text style={styles.chartTooltipValue}>{formatMoney(value)}</Text>
+                        </View>
+                      )}
                       <View
                         style={[
                           styles.chartBar,
@@ -369,7 +427,9 @@ export function AuthScreen({ onLogin }) {
       <ScrollView contentContainerStyle={styles.authScroll} keyboardShouldPersistTaps="handled">
         {/* Logo */}
         <View style={styles.authLogo}>
-          <Text style={{ fontSize: 52 }}>💎</Text>
+          <View style={styles.authLogoBadge}>
+            <Image source={brandMark} style={styles.authLogoImage} resizeMode="contain" />
+          </View>
           <Text style={styles.authTitle}>FinSight</Text>
           <Text style={styles.authSubtitle}>Your private finance advisor</Text>
         </View>
@@ -418,6 +478,7 @@ export function AuthScreen({ onLogin }) {
 export function DashboardScreen({ profile, navigation }) {
   const [data,    setData]    = useState(null);
   const [loading, setLoading] = useState(true);
+  const tabBarHeight = useBottomTabBarHeight();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -435,9 +496,14 @@ export function DashboardScreen({ profile, navigation }) {
   const { totalSpend, lastMonthSpend, totalIncome, monthlyTrend, spendByCategory, cats, budgets, recommendations, anomalies, subscriptions, forecasts } = data;
   const topCategories  = Object.entries(spendByCategory).sort((a, b) => b[1] - a[1]).slice(0, 5);
   const monthLabel     = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const bottomContentInset = getFloatingTabBarSpacing(tabBarHeight);
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.screenContent} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={[styles.screenContent, { paddingBottom: bottomContentInset }]}
+      showsVerticalScrollIndicator={false}
+    >
       {/* Header */}
       <View style={styles.dashHeader}>
         <View>
@@ -512,6 +578,12 @@ export function DashboardScreen({ profile, navigation }) {
           })}
         </Card>
       )}
+      {topCategories.length === 0 && (
+        <Card style={styles.sectionCard}>
+          <SectionHeader title="Top Spending" />
+          <Text style={styles.emptySectionText}>No spending recorded for this month yet.</Text>
+        </Card>
+      )}
 
       {/* AI Insights */}
       {recommendations.length > 0 && (
@@ -525,6 +597,12 @@ export function DashboardScreen({ profile, navigation }) {
           ))}
         </Card>
       )}
+      {recommendations.length === 0 && (
+        <Card style={styles.sectionCard}>
+          <SectionHeader title="AI Insights" />
+          <Text style={styles.emptySectionText}>Add a bit more spending history and FinSight will surface personalized insights here.</Text>
+        </Card>
+      )}
 
       {/* Zombie Subscriptions */}
       {subscriptions.length > 0 && (
@@ -536,9 +614,15 @@ export function DashboardScreen({ profile, navigation }) {
                 <Text style={styles.subMerchant}>{s.merchant}</Text>
                 <Text style={styles.subMeta}>{s.frequency} · last seen {s.last_seen?.slice(0, 10)}</Text>
               </View>
-              <Badge color={colors.warning}>${Math.abs(s.amount).toFixed(2)}/mo</Badge>
+              <Badge color={colors.warning}>${Math.abs(s.amount).toFixed(2)}{s.billing_suffix || (s.frequency === 'weekly' ? '/wk' : '/mo')}</Badge>
             </View>
           ))}
+        </Card>
+      )}
+      {subscriptions.length === 0 && (
+        <Card style={styles.sectionCard}>
+          <SectionHeader title="Zombie Subscriptions" />
+          <Text style={styles.emptySectionText}>No recurring charges stand out yet.</Text>
         </Card>
       )}
 
@@ -555,6 +639,12 @@ export function DashboardScreen({ profile, navigation }) {
               </View>
             ))}
           </View>
+        </Card>
+      )}
+      {forecasts.length === 0 && (
+        <Card style={styles.sectionCard}>
+          <SectionHeader title="Spending Forecast" />
+          <Text style={styles.emptySectionText}>Forecasts will appear once there is enough monthly history to model future spending.</Text>
         </Card>
       )}
     </ScrollView>
@@ -574,9 +664,11 @@ export function TransactionsScreen({ profile }) {
   const [showImport,   setShowImport]   = useState(false);
   const [showOcrImport, setShowOcrImport] = useState(false);
   const [editTx,       setEditTx]       = useState(null);
+  const [pendingDeleteTx, setPendingDeleteTx] = useState(null);
   const [expandedTxId, setExpandedTxId] = useState(null);
   const [hoveredTxId,  setHoveredTxId]  = useState(null);
   const [form,         setForm]         = useState(createEmptyTransactionForm);
+  const tabBarHeight = useBottomTabBarHeight();
 
   const load = useCallback(async () => {
     const [txs, cats] = await Promise.all([
@@ -644,15 +736,20 @@ export function TransactionsScreen({ profile }) {
     */
   };
 
-  const handleDelete = (id) => {
-    Alert.alert('Delete Transaction', 'Are you sure?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => { await FinancialDataService.deleteTransaction(id); load(); } },
-    ]);
+  const handleDelete = (transaction) => {
+    setPendingDeleteTx(transaction);
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDeleteTx) return;
+    await FinancialDataService.deleteTransaction(pendingDeleteTx.id);
+    setPendingDeleteTx(null);
+    load();
   };
 
   const getCat = (id) => categories.find(c => c.id === id);
   const transactionSections = buildTransactionSections(transactions);
+  const bottomContentInset = getFloatingTabBarSpacing(tabBarHeight);
 
   const renderTx = ({ item: tx }) => {
     const cat = getCat(tx.category_id);
@@ -674,7 +771,7 @@ export function TransactionsScreen({ profile }) {
             <TouchableOpacity onPress={() => { setEditTx(tx); setForm({ date: tx.date, merchant: tx.merchant || '', amount: String(tx.amount), category_id: tx.category_id || '', note: tx.note || '' }); setShowAdd(true); }}>
               <Text style={{ fontSize: 14 }}>✏️</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => handleDelete(tx.id)}>
+            <TouchableOpacity onPress={() => handleDelete(tx)}>
               <Text style={{ fontSize: 14 }}>🗑️</Text>
             </TouchableOpacity>
           </View>
@@ -737,7 +834,7 @@ export function TransactionsScreen({ profile }) {
                 size="sm"
                 variant="danger"
                 style={styles.txActionButton}
-                onPress={() => handleDelete(tx.id)}
+                onPress={() => handleDelete(tx)}
               >
                 Delete
               </Btn>
@@ -780,7 +877,8 @@ export function TransactionsScreen({ profile }) {
           <TextInput
             value={search} onChangeText={setSearch} placeholder="Search transactions..."
             placeholderTextColor={colors.textMuted}
-            style={[styles.searchInput, Platform.OS === 'windows' && styles.windowsTextInput]}
+            enableFocusRing={Platform.OS === 'windows' ? false : undefined}
+            style={styles.searchInput}
           />
         </View>
         <View style={styles.toolbarSection}>
@@ -836,7 +934,7 @@ export function TransactionsScreen({ profile }) {
           extraData={expandedTxId}
           renderSectionHeader={renderSectionHeader}
           stickySectionHeadersEnabled={false}
-          contentContainerStyle={styles.transactionListContent}
+          contentContainerStyle={[styles.transactionListContent, { paddingBottom: bottomContentInset }]}
           ItemSeparatorComponent={() => <View style={styles.divider} />}
         />
       )}
@@ -855,6 +953,34 @@ export function TransactionsScreen({ profile }) {
         }
       >
         <TransactionFormFields form={form} setForm={setForm} categories={categories} />
+      </BottomSheet>
+
+      <BottomSheet
+        visible={!!pendingDeleteTx}
+        title="Delete Transaction"
+        onClose={() => setPendingDeleteTx(null)}
+        footer={
+          <View style={{ flexDirection: 'column', gap: 10 }}>
+            <Btn variant="danger" onPress={confirmDelete} fullWidth>Delete Transaction</Btn>
+            <Btn variant="ghost" onPress={() => setPendingDeleteTx(null)} fullWidth>Cancel</Btn>
+          </View>
+        }
+      >
+        <Text style={styles.sheetBodyText}>This transaction will be permanently removed from your history.</Text>
+        {pendingDeleteTx && (
+          <Card style={styles.confirmationCard}>
+            <Text style={styles.confirmationCardTitle}>{pendingDeleteTx.merchant || 'Unnamed transaction'}</Text>
+            <Text style={styles.confirmationCardMeta}>
+              {pendingDeleteTx.date} {'\u2022'} {getCat(pendingDeleteTx.category_id)?.name || 'Uncategorized'}
+            </Text>
+            <Text style={styles.confirmationCardAmount}>
+              {Number(pendingDeleteTx.amount) > 0 ? '+' : '-'}{formatMoney(Math.abs(Number(pendingDeleteTx.amount || 0)))}
+            </Text>
+            {!!pendingDeleteTx.note?.trim() && (
+              <Text style={styles.confirmationCardNote}>{pendingDeleteTx.note.trim()}</Text>
+            )}
+          </Card>
+        )}
       </BottomSheet>
 
       {/* CSV Import Sheet */}
@@ -1208,6 +1334,7 @@ export function BudgetManagerScreen({ profile }) {
   const [expandedBudgetId, setExpandedBudgetId] = useState(null);
   const [hoveredBudgetId, setHoveredBudgetId] = useState(null);
   const [saving,     setSaving]     = useState(false);
+  const tabBarHeight = useBottomTabBarHeight();
   const now   = new Date();
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const year  = String(now.getFullYear());
@@ -1284,6 +1411,7 @@ export function BudgetManagerScreen({ profile }) {
     });
     setShowAdd(true);
   };
+  const bottomContentInset = getFloatingTabBarSpacing(tabBarHeight);
 
   return (
     <View style={styles.screen}>
@@ -1292,7 +1420,7 @@ export function BudgetManagerScreen({ profile }) {
         <Btn size="sm" onPress={() => openBudgetEditor()}>+ Budget</Btn>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 20 }}>
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: bottomContentInset }}>
         {budgets.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={{ fontSize: 48, marginBottom: 8 }}>🎯</Text>
@@ -1405,38 +1533,82 @@ export function BudgetManagerScreen({ profile }) {
 // ─────────────────────────────────────────────
 
 export function AssistantScreen({ profile }) {
-  const [messages, setMessages] = useState([{ role: 'assistant', text: "Hi! I'm your FinSight assistant. Ask about spending, budgets, transactions, imports, or simple finance questions." }]);
+  const assistantSession = getAssistantSession(profile.id);
+  const [messages, setMessages] = useState(assistantSession.messages);
   const [input,    setInput]    = useState('');
-  const [loading,  setLoading]  = useState(false);
+  const [loading,  setLoading]  = useState(assistantSession.loading);
   const [context,  setContext]  = useState({});
   const [assistantStatus, setAssistantStatus] = useState({ state: 'not-installed', ready: false, detail: 'Checking local AI package...' });
   const [installing, setInstalling] = useState(false);
   const [installProgress, setInstallProgress] = useState(null);
   const scrollRef = useRef();
+  const scrollTimeoutRef = useRef(null);
+  const isMountedRef = useRef(true);
+  const activeScreenRef = useRef(true);
+  const generationIdRef = useRef(assistantSession.generationId || 0);
+  const tabBarHeight = useBottomTabBarHeight();
+
+  const syncAssistantStateFromSession = useCallback(() => {
+    const session = getAssistantSession(profile.id);
+    generationIdRef.current = session.generationId || 0;
+    setMessages(session.messages);
+    setLoading(!!session.loading);
+  }, [profile.id]);
+
+  const releaseAssistantUiWork = useCallback(() => {
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
+      scrollTimeoutRef.current = null;
+    }
+  }, []);
 
   const refreshAssistantStatus = useCallback(() => {
-    LocalAIService.getStatus().then(setAssistantStatus).catch((error) => {
+    LocalAIService.getStatus().then((status) => {
+      if (!isMountedRef.current) return;
+      setAssistantStatus(status);
+    }).catch((error) => {
       console.warn('Failed to refresh local AI status:', error);
+      if (!isMountedRef.current) return;
       setAssistantStatus({ state: 'error', ready: false, detail: 'Unable to read local AI package status.' });
     });
   }, []);
 
   useEffect(() => {
-    LocalAIService.getAssistantContext(profile.id).then(setContext);
+    syncAssistantStateFromSession();
+    LocalAIService.getAssistantContext(profile.id).then((nextContext) => {
+      if (!isMountedRef.current) return;
+      setContext(nextContext);
+    });
     refreshAssistantStatus();
-  }, [profile.id, refreshAssistantStatus]);
+  }, [profile.id, refreshAssistantStatus, syncAssistantStateFromSession]);
 
   useFocusEffect(useCallback(() => {
+    activeScreenRef.current = true;
+    syncAssistantStateFromSession();
     refreshAssistantStatus();
-  }, [refreshAssistantStatus]));
+
+    return () => {
+      activeScreenRef.current = false;
+      releaseAssistantUiWork();
+    };
+  }, [refreshAssistantStatus, releaseAssistantUiWork, syncAssistantStateFromSession]));
 
   useEffect(() => {
     const reloadContext = () => {
-      LocalAIService.getAssistantContext(profile.id).then(setContext);
+      LocalAIService.getAssistantContext(profile.id).then((nextContext) => {
+        if (!isMountedRef.current) return;
+        setContext(nextContext);
+      });
     };
 
     return subscribeToDataChanges(reloadContext);
   }, [profile.id]);
+
+  useEffect(() => () => {
+    isMountedRef.current = false;
+    activeScreenRef.current = false;
+    releaseAssistantUiWork();
+  }, [releaseAssistantUiWork]);
 
   const installModel = async () => {
     setInstalling(true);
@@ -1460,47 +1632,91 @@ export function AssistantScreen({ profile }) {
   const send = async () => {
     if (!input.trim() || loading) return;
     const userMsg = input.trim();
+    const session = getAssistantSession(profile.id);
+    const generationId = (session.generationId || 0) + 1;
+    generationIdRef.current = generationId;
     const conversationHistory = messages
       .filter((message) => message.text && message.text !== '...')
       .slice(-8)
       .map((message) => ({ role: message.role, text: message.text }));
+    const nextMessages = [...messages, { role: 'user', text: userMsg }, { role: 'assistant', text: '...' }];
+    session.messages = nextMessages;
+    session.loading = true;
+    session.generationId = generationId;
     setInput('');
-    setMessages(m => [...m, { role: 'user', text: userMsg }]);
+    setMessages(nextMessages);
     setLoading(true);
-    setMessages(m => [...m, { role: 'assistant', text: '...' }]);
 
-    await LocalAIService.ask(userMsg, context, (partial) => {
-      setMessages(m => m.map((msg, i) => i === m.length - 1 ? { ...msg, text: partial } : msg));
-    }, conversationHistory);
-    setLoading(false);
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+    try {
+      await LocalAIService.ask(userMsg, context, (partial) => {
+        const latestSession = getAssistantSession(profile.id);
+        if ((latestSession.generationId || 0) !== generationId) {
+          return;
+        }
+        const resolvedMessages = latestSession.messages.map((msg, i) => (
+          i === latestSession.messages.length - 1 ? { ...msg, text: partial } : msg
+        ));
+        latestSession.messages = resolvedMessages;
+        latestSession.loading = false;
+
+        if (!isMountedRef.current || !activeScreenRef.current || generationIdRef.current !== generationId) {
+          return;
+        }
+
+        setMessages(resolvedMessages);
+      }, conversationHistory);
+    } finally {
+      const latestSession = getAssistantSession(profile.id);
+      if ((latestSession.generationId || 0) !== generationId) {
+        return;
+      }
+      latestSession.loading = false;
+
+      if (!isMountedRef.current || generationIdRef.current !== generationId) {
+        return;
+      }
+
+      setLoading(false);
+      if (activeScreenRef.current) {
+        scrollTimeoutRef.current = setTimeout(() => {
+          if (!isMountedRef.current || !activeScreenRef.current || generationIdRef.current !== generationId) {
+            return;
+          }
+          scrollRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    }
   };
 
   const suggestions = ['How much did I spend on food?', 'Which budget needs attention?', 'What is cash flow?'];
   const canSend = !!input.trim() && !loading && !installing;
+  const bottomContentInset = getFloatingTabBarSpacing(tabBarHeight);
+  const showAssistantSetupBanner = !assistantStatus.ready || !!installProgress;
 
   return (
     <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={[styles.apiKeyBanner, assistantStatus.ready ? styles.assistantReadyBanner : styles.assistantSetupBanner]}>
-        <Text style={styles.apiKeyText}>On-device AI assistant</Text>
-        <Text style={styles.apiKeyNote}>{assistantStatus.detail}</Text>
-        <Text style={styles.importHint}>Install the local assistant package for the richer offline package and OCR title cleanup. Basic assistant responses still run locally in the app.</Text>
-        {!assistantStatus.ready && (
-          <View style={styles.assistantActionRow}>
-            <Btn onPress={installModel} disabled={installing} size="sm">
-              {installing ? 'Installing...' : `Install ${formatModelSize(assistantStatus.recommendedModel?.sizeBytes)}`}
-            </Btn>
-          </View>
-        )}
-        {!!installProgress && (
-          <View style={{ marginTop: 12 }}>
-            <ProgressBar value={installProgress.progress || 0} max={1} color={colors.accent} />
-            <Text style={[styles.importHint, { marginTop: 6 }]}>{installProgress.detail}</Text>
-          </View>
-        )}
-      </View>
+      {showAssistantSetupBanner && (
+        <View style={[styles.apiKeyBanner, styles.assistantSetupBanner]}>
+          <Text style={styles.apiKeyText}>On-device AI assistant</Text>
+          <Text style={styles.apiKeyNote}>{assistantStatus.detail}</Text>
+          <Text style={styles.importHint}>Install the local assistant package for the richer offline package and OCR title cleanup. Basic assistant responses still run locally in the app.</Text>
+          {!assistantStatus.ready && (
+            <View style={styles.assistantActionRow}>
+              <Btn onPress={installModel} disabled={installing} size="sm">
+                {installing ? 'Installing...' : `Install ${formatModelSize(assistantStatus.recommendedModel?.sizeBytes)}`}
+              </Btn>
+            </View>
+          )}
+          {!!installProgress && (
+            <View style={{ marginTop: 12 }}>
+              <ProgressBar value={installProgress.progress || 0} max={1} color={colors.accent} />
+              <Text style={[styles.importHint, { marginTop: 6 }]}>{installProgress.detail}</Text>
+            </View>
+          )}
+        </View>
+      )}
 
-      <ScrollView ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
+      <ScrollView ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={[styles.assistantScrollContent, { paddingBottom: 16 }]}>
         {messages.length === 1 && (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
             {suggestions.map((s, i) => (
@@ -1520,14 +1736,14 @@ export function AssistantScreen({ profile }) {
         ))}
       </ScrollView>
 
-        <View style={styles.inputBar}>
-          <View style={styles.chatInputFrame}>
+        <View style={[styles.inputBar, { marginBottom: bottomContentInset }]}>
           <TextInput
             value={input} onChangeText={setInput}
             placeholder='Ask about spending, transactions, budgets, or a simple finance question...'
             placeholderTextColor={colors.textMuted}
             multiline
-            style={[styles.chatInput, Platform.OS === 'windows' && styles.windowsTextInput]}
+            enableFocusRing={Platform.OS === 'windows' ? false : undefined}
+            style={styles.chatInput}
             onSubmitEditing={send}
             onKeyPress={Platform.OS === 'windows' ? (event) => {
               if (event.nativeEvent.key === 'Enter' && input.trim() && !loading && !installing) {
@@ -1540,7 +1756,6 @@ export function AssistantScreen({ profile }) {
             enablesReturnKeyAutomatically
             editable={!installing}
           />
-          </View>
         <TouchableOpacity onPress={send} disabled={!canSend} style={[styles.sendBtn, !canSend && { opacity: 0.4 }]}>
           <Text style={{ color: '#fff', fontWeight: font.weights.bold }}>Send</Text>
         </TouchableOpacity>
@@ -1557,6 +1772,8 @@ export function ProfileScreen({ profile, onLogout }) {
   const [aiStatus, setAiStatus] = useState({ state: 'not-installed', ready: false, detail: 'Checking local AI package...' });
   const [aiBusy, setAiBusy] = useState(false);
   const [aiProgress, setAiProgress] = useState(null);
+  const [showClearDataConfirm, setShowClearDataConfirm] = useState(false);
+  const tabBarHeight = useBottomTabBarHeight();
 
   useEffect(() => {
     const loadStats = () => {
@@ -1618,16 +1835,15 @@ export function ProfileScreen({ profile, onLogout }) {
   };
 
   const clearData = () => {
-    Alert.alert('Clear All Data', 'Delete ALL financial data? This cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => {
-        const db = await getDB();
-        await db.runAsync('DELETE FROM transactions WHERE profile_id = ?', [profile.id]);
-        await db.runAsync('DELETE FROM budgets WHERE profile_id = ?', [profile.id]);
-        emitDataChanged();
-        Alert.alert('Done', 'All financial data cleared.');
-      }},
-    ]);
+    setShowClearDataConfirm(true);
+  };
+
+  const confirmClearData = async () => {
+    const db = await getDB();
+    await db.runAsync('DELETE FROM transactions WHERE profile_id = ?', [profile.id]);
+    await db.runAsync('DELETE FROM budgets WHERE profile_id = ?', [profile.id]);
+    setShowClearDataConfirm(false);
+    emitDataChanged();
   };
 
   const privacyItems = [
@@ -1636,9 +1852,11 @@ export function ProfileScreen({ profile, onLogout }) {
     { icon: '🚫', title: 'No Banking APIs',    desc: 'No Plaid, Yodlee or bank connection' },
     { icon: '🤖', title: 'AI Privacy',         desc: 'AI responses stay on-device through a local offline runtime' },
   ];
+  const bottomContentInset = getFloatingTabBarSpacing(tabBarHeight);
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+    <>
+    <ScrollView style={styles.screen} contentContainerStyle={{ padding: 16, paddingBottom: bottomContentInset }}>
       {/* Profile Card */}
       <Card style={{ marginBottom: 16, alignItems: 'center' }}>
         <View style={styles.avatar}><Text style={{ fontSize: 28 }}>👤</Text></View>
@@ -1701,6 +1919,26 @@ export function ProfileScreen({ profile, onLogout }) {
       <Btn variant="danger" onPress={clearData} fullWidth style={{ marginBottom: 12 }}>🗑️ Clear All Financial Data</Btn>
       <Btn variant="outline" onPress={onLogout} fullWidth>Sign Out</Btn>
     </ScrollView>
+      <BottomSheet
+        visible={showClearDataConfirm}
+        title="Clear All Data"
+        onClose={() => setShowClearDataConfirm(false)}
+        footer={
+          <View style={{ flexDirection: 'column', gap: 10 }}>
+            <Btn variant="danger" onPress={confirmClearData} fullWidth>Delete Everything</Btn>
+            <Btn variant="ghost" onPress={() => setShowClearDataConfirm(false)} fullWidth>Cancel</Btn>
+          </View>
+        }
+      >
+        <Text style={styles.sheetBodyText}>This permanently removes all financial data for this profile. This cannot be undone.</Text>
+        <Card style={styles.confirmationCard}>
+          <Text style={styles.confirmationCardTitle}>{profile.name}</Text>
+          <Text style={styles.confirmationCardMeta}>{profile.email}</Text>
+          <Text style={styles.confirmationCardNote}>Transactions to delete: {stats.txCount}</Text>
+          <Text style={styles.confirmationCardNote}>Budgets to delete: {stats.budgetCount}</Text>
+        </Card>
+      </BottomSheet>
+    </>
   );
 }
 
@@ -1759,14 +1997,16 @@ const styles = StyleSheet.create({
   emptyText:         { color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
   authContainer:     { flex: 1, backgroundColor: colors.bg },
   authScroll:        { padding: 24, justifyContent: 'center', minHeight: '100%' },
-  authLogo:          { alignItems: 'center', marginBottom: 40 },
-  authTitle:         { fontSize: font.sizes.hero, fontWeight: font.weights.bold, color: colors.text, marginTop: 8 },
-  authSubtitle:      { color: colors.textMuted, fontSize: font.sizes.sm, marginTop: 4 },
-  tabRow:            { flexDirection: 'row', gap: 4, marginBottom: 24, backgroundColor: colors.surfaceAlt, borderRadius: radius.md, padding: 4 },
+  authLogo:          { alignItems: 'center', marginBottom: 32 },
+  authLogoBadge:     { width: 104, height: 104, borderRadius: 30, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', shadowColor: '#3452f4', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.1, shadowRadius: 28, elevation: 5 },
+  authLogoImage:     { width: 74, height: 74 },
+  authTitle:         { fontSize: font.sizes.hero, fontWeight: font.weights.bold, color: colors.text, marginTop: 14 },
+  authSubtitle:      { color: colors.textMuted, fontSize: font.sizes.sm, marginTop: 6 },
+  tabRow:            { flexDirection: 'row', gap: 4, marginBottom: 24, backgroundColor: colors.surfaceAlt, borderRadius: radius.md, padding: 4, borderWidth: 1, borderColor: colors.border },
   tab:               { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: radius.sm - 2 },
   tabActive:         { backgroundColor: colors.accent },
   tabText:           { color: colors.textMuted, fontWeight: font.weights.semibold, fontSize: font.sizes.sm },
-  errorBox:          { backgroundColor: colors.dangerSoft, borderRadius: radius.sm, padding: 10, marginBottom: 12 },
+  errorBox:          { backgroundColor: colors.dangerSoft, borderRadius: radius.sm, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: `${colors.danger}22` },
   errorText:         { color: colors.danger, fontSize: font.sizes.sm },
   demoHint:          { textAlign: 'center', color: colors.textMuted, fontSize: font.sizes.xs, marginTop: 12 },
   privacyNote:       { textAlign: 'center', color: colors.textMuted, fontSize: font.sizes.xs, marginTop: 20 },
@@ -1776,31 +2016,34 @@ const styles = StyleSheet.create({
   heroCard:          { backgroundColor: colors.surface, marginBottom: 16, borderColor: `${colors.accent}40` },
   heroLabel:         { color: colors.textMuted, fontSize: font.sizes.xs, fontWeight: font.weights.semibold, letterSpacing: 0.5, marginBottom: 4 },
   heroSubLabel:      { color: colors.textSecondary, fontSize: font.sizes.xs, lineHeight: 18, marginTop: 2 },
-  heroHeaderRow:     { flexDirection: 'row', justifyContent: 'space-between', gap: 12, marginBottom: 14 },
-  heroToggle:        { flexDirection: 'row', alignSelf: 'flex-start', backgroundColor: colors.surfaceAlt, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, padding: 4, gap: 4 },
+  heroHeader:        { position: 'relative', marginBottom: 10, minHeight: 42 },
+  heroHeaderTextBlock: { paddingRight: 124 },
+  heroToggle:        { position: 'absolute', top: 0, right: 0, flexDirection: 'row', alignSelf: 'flex-start', backgroundColor: colors.surfaceAlt, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, padding: 4, gap: 4 },
   heroToggleChip:    { paddingHorizontal: 12, paddingVertical: 7, borderRadius: radius.full },
   heroToggleChipActive: { backgroundColor: colors.accent },
   heroToggleText:    { color: colors.textSecondary, fontSize: font.sizes.xs, fontWeight: font.weights.semibold },
   heroToggleTextActive: { color: colors.text },
-  heroAmountRow:     { flexDirection: 'row', alignItems: 'flex-end', gap: 12, marginBottom: 18 },
+  heroAmountBlock:   { marginTop: 0, marginBottom: 18 },
+  heroAmountRow:     { flexDirection: 'row', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12 },
   heroAmount:        { fontSize: 34, fontWeight: font.weights.bold, color: colors.text },
+  heroAmountCaption: { color: colors.textMuted, fontSize: font.sizes.xs, lineHeight: 18, marginTop: 4 },
   heroStatsRow:      { flexDirection: 'row', justifyContent: 'space-between', gap: 16, marginTop: 18 },
   statLabel:         { color: colors.textMuted, fontSize: font.sizes.xs },
   statValue:         { color: colors.text, fontWeight: font.weights.semibold, marginTop: 2 },
-  chartWrap:         { marginTop: 2 },
+  chartWrap:         { marginTop: 0 },
   chartArea:         { position: 'relative', height: 188 },
   chartGridLine:     { position: 'absolute', left: 0, right: 0, flexDirection: 'row', alignItems: 'center' },
   chartGridLabel:    { width: 42, color: colors.textMuted, fontSize: 10 },
   chartGridStroke:   { flex: 1, height: 1, backgroundColor: `${colors.textMuted}35` },
-  chartBarsRow:      { flexDirection: 'row', alignItems: 'flex-end', marginLeft: 48, gap: 10, height: 188, paddingTop: 12, paddingBottom: 1 },
+  chartBarsRow:      { flexDirection: 'row', alignItems: 'flex-end', marginLeft: 48, gap: 10, height: 188, paddingTop: 12, paddingBottom: 0, paddingRight: 2, overflow: 'visible' },
   chartColumn:       { flex: 1, alignItems: 'center' },
-  chartBarSlot:      { width: '100%', height: 176, justifyContent: 'flex-end', alignItems: 'center' },
-  chartBarPressable: { width: '100%', alignItems: 'center', justifyContent: 'flex-end', minHeight: 136 },
-  chartBar:          { width: '72%', maxWidth: 34, minWidth: 22, borderRadius: 10 },
-  chartMonthRow:     { flexDirection: 'row', marginLeft: 48, gap: 10, marginTop: 10 },
+  chartBarSlot:      { width: '100%', height: CHART_DRAWABLE_HEIGHT, justifyContent: 'flex-end', alignItems: 'center', overflow: 'visible' },
+  chartBarPressable: { width: '100%', alignItems: 'center', justifyContent: 'flex-end', minHeight: CHART_DRAWABLE_HEIGHT, overflow: 'visible' },
+  chartBar:          { width: '72%', maxWidth: 34, minWidth: 22, borderRadius: 10, transform: [{ translateY: -4 }] },
+  chartMonthRow:     { flexDirection: 'row', marginLeft: 48, gap: 10, marginTop: 12, paddingRight: 2 },
   chartMonthColumn:  { flex: 1, alignItems: 'center' },
   chartMonthLabel:   { color: colors.textSecondary, fontSize: font.sizes.xs },
-  chartTooltip:      { position: 'absolute', top: 0, minWidth: 96, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: `${colors.accent}55`, borderRadius: radius.md, paddingHorizontal: 10, paddingVertical: 8, alignItems: 'center', zIndex: 2 },
+  chartTooltip:      { position: 'absolute', left: '50%', minWidth: 96, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: `${colors.accent}55`, borderRadius: radius.md, paddingHorizontal: 10, paddingVertical: 8, alignItems: 'center', zIndex: 2, transform: [{ translateX: -48 }] },
   chartTooltipMonth: { color: colors.textMuted, fontSize: 10, marginBottom: 2, textAlign: 'center' },
   chartTooltipValue: { color: colors.text, fontSize: font.sizes.sm, fontWeight: font.weights.bold },
   alertBox:          { backgroundColor: colors.dangerSoft, borderWidth: 1, borderColor: `${colors.danger}30`, borderRadius: radius.md, padding: 14, marginBottom: 16, flexDirection: 'row', gap: 10 },
@@ -1816,6 +2059,7 @@ const styles = StyleSheet.create({
   catAmt:            { fontSize: font.sizes.sm, fontWeight: font.weights.bold, color: colors.text },
   pctLabel:          { fontSize: font.sizes.xs, color: colors.textMuted, minWidth: 32, textAlign: 'right' },
   recRow:            { flexDirection: 'row', gap: 10, paddingVertical: 10, alignItems: 'flex-start' },
+  emptySectionText:  { color: colors.textMuted, fontSize: font.sizes.sm, lineHeight: 20 },
   privacyRow:        { flexDirection: 'row', gap: 10, paddingVertical: 10, alignItems: 'flex-start' },
   privacyIcon:       { fontSize: 20, lineHeight: 24, marginTop: 1 },
   privacyTextWrap:   { flex: 1, minWidth: 0, flexShrink: 1 },
@@ -1856,23 +2100,28 @@ const styles = StyleSheet.create({
   apiKeyText:        { color: colors.text, fontSize: font.sizes.sm, fontWeight: font.weights.semibold },
   apiKeyNote:        { color: colors.textMuted, fontSize: font.sizes.xs, marginTop: 6 },
   assistantActionRow: { marginTop: 12, alignItems: 'flex-start' },
+  assistantScrollContent: { padding: 16, paddingBottom: 16 },
   msgRow:            { marginBottom: 12, alignItems: 'flex-start' },
   msgRowUser:        { alignItems: 'flex-end' },
   msgBubble:         { maxWidth: '80%', borderRadius: 16, padding: 12 },
   msgUser:           { backgroundColor: colors.accent, borderBottomRightRadius: 4 },
   msgAssistant:      { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderBottomLeftRadius: 4 },
   msgText:           { color: colors.text, fontSize: font.sizes.md, lineHeight: 21 },
-  inputBar:          { flexDirection: 'row', gap: 10, padding: 12, borderTopWidth: 1, borderColor: colors.border, backgroundColor: colors.bg },
-  chatInputFrame:    { flex: 1, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md },
+  inputBar:          { flexDirection: 'row', gap: 10, padding: 12, marginHorizontal: 16, marginTop: 8, borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, backgroundColor: colors.surface, shadowColor: '#3452f4', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.08, shadowRadius: 22, elevation: 5 },
   chatInput:         { flex: 1, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: 12, color: colors.text, fontSize: font.sizes.md, maxHeight: 100 },
   sendBtn:           { backgroundColor: colors.accent, borderRadius: radius.md, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
   suggestionChip:    { backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border, borderRadius: radius.full, paddingHorizontal: 14, paddingVertical: 8 },
   suggestionText:    { color: colors.textSecondary, fontSize: font.sizes.xs },
+  sheetBodyText:     { color: colors.textSecondary, fontSize: font.sizes.sm, lineHeight: 20 },
+  confirmationCard:  { marginTop: 14, gap: 6 },
+  confirmationCardTitle: { color: colors.text, fontSize: font.sizes.md, fontWeight: font.weights.semibold },
+  confirmationCardMeta: { color: colors.textMuted, fontSize: font.sizes.xs },
+  confirmationCardAmount: { color: colors.text, fontSize: font.sizes.lg, fontWeight: font.weights.bold, marginTop: 2 },
+  confirmationCardNote: { color: colors.textSecondary, fontSize: font.sizes.xs, lineHeight: 18, marginTop: 4 },
   avatar:            { width: 64, height: 64, borderRadius: 32, backgroundColor: `${colors.accent}25`, borderWidth: 2, borderColor: `${colors.accent}50`, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   profileName:       { fontSize: font.sizes.xl, fontWeight: font.weights.bold, color: colors.text },
   profileEmail:      { color: colors.textMuted, fontSize: font.sizes.sm, marginTop: 4 },
   statsRow:          { flexDirection: 'row', gap: 40, marginTop: 16 },
   statCell:          { alignItems: 'center' },
   statBig:           { fontSize: font.sizes.xxl, fontWeight: font.weights.bold, color: colors.text },
-  windowsTextInput:  { backgroundColor: 'transparent', borderWidth: 0 },
 });

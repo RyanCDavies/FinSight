@@ -2,26 +2,26 @@
 // FinSight Design System — React Native
 
 export const colors = {
-  bg:            '#0a0e1a',
-  surface:       '#111827',
-  surfaceAlt:    '#1a2235',
-  border:        '#1e2d45',
-  accent:        '#3b82f6',
-  accentSoft:    '#3b82f615',
-  success:       '#10b981',
-  warning:       '#f59e0b',
-  danger:        '#ef4444',
-  dangerSoft:    '#ef444415',
-  text:          '#f1f5f9',
-  textMuted:     '#64748b',
-  textSecondary: '#94a3b8',
+  bg:            '#f5f8ff',
+  surface:       '#ffffff',
+  surfaceAlt:    '#edf2ff',
+  border:        '#d6e1ff',
+  accent:        '#3452f4',
+  accentSoft:    '#3452f418',
+  success:       '#12a66c',
+  warning:       '#f0a11f',
+  danger:        '#e45757',
+  dangerSoft:    '#e4575714',
+  text:          '#17191f',
+  textMuted:     '#6d7892',
+  textSecondary: '#42506b',
 };
 
 export const radius = {
-  sm:  8,
-  md:  12,
-  lg:  16,
-  xl:  20,
+  sm:  10,
+  md:  14,
+  lg:  20,
+  xl:  28,
   full: 999,
 };
 

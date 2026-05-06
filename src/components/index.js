@@ -3,10 +3,12 @@
 
 import React from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, ActivityIndicator,
+  View, Text, TextInput, TouchableOpacity, ActivityIndicator, Image,
   StyleSheet, Modal as RNModal, ScrollView, Pressable, Platform,
 } from 'react-native';
 import { colors, radius, spacing, font } from '../theme';
+
+const brandMark = require('../../assets/ico.png');
 
 // ─── Card ───────────────────────────────────
 
@@ -70,7 +72,7 @@ export function Input({ label, value, onChangeText, placeholder, secureTextEntry
       {label && (
         <Text style={styles.inputLabel}>{label}</Text>
       )}
-      <View style={[styles.inputFrame, isWindows && styles.windowsInputFrame]}>
+      <View style={styles.inputFrame}>
         {icon && <Text style={styles.inputIcon}>{icon}</Text>}
         <TextInput
           value={value}
@@ -80,9 +82,9 @@ export function Input({ label, value, onChangeText, placeholder, secureTextEntry
           secureTextEntry={secureTextEntry}
           keyboardType={keyboardType}
           multiline={multiline}
+          enableFocusRing={!isWindows ? undefined : false}
           style={[
             styles.input,
-            isWindows && styles.windowsInput,
             icon && { paddingLeft: 40 },
             multiline && { height: 80, textAlignVertical: 'top' },
           ]}
@@ -119,7 +121,9 @@ export function ProgressBar({ value, max, color = colors.accent }) {
 export function ScreenLoader() {
   return (
     <View style={styles.loader}>
-      <Text style={{ fontSize: 36, marginBottom: 8 }}>💎</Text>
+      <View style={styles.loaderLogoFrame}>
+        <Image source={brandMark} style={styles.loaderLogo} resizeMode="contain" />
+      </View>
       <ActivityIndicator color={colors.accent} />
     </View>
   );
@@ -217,6 +221,11 @@ const styles = StyleSheet.create({
     padding:         spacing.xl,
     borderWidth:     1,
     borderColor:     colors.border,
+    shadowColor:     '#3452f4',
+    shadowOffset:    { width: 0, height: 10 },
+    shadowOpacity:   0.06,
+    shadowRadius:    24,
+    elevation:       2,
   },
   btn: {
     borderRadius:   radius.md,
@@ -249,12 +258,6 @@ const styles = StyleSheet.create({
   inputFrame: {
     position: 'relative',
   },
-  windowsInputFrame: {
-    backgroundColor: colors.surfaceAlt,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-  },
   input: {
     backgroundColor: colors.surfaceAlt,
     borderWidth:     1,
@@ -264,10 +267,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     color:           colors.text,
     fontSize:        font.sizes.md,
-  },
-  windowsInput: {
-    backgroundColor: 'transparent',
-    borderWidth: 0,
   },
   progressTrack: {
     backgroundColor: colors.surfaceAlt,
@@ -285,6 +284,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.bg,
   },
+  loaderLogoFrame: {
+    width: 112,
+    height: 112,
+    borderRadius: 32,
+    marginBottom: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: '#3452f4',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.1,
+    shadowRadius: 28,
+    elevation: 4,
+  },
+  loaderLogo: {
+    width: 74,
+    height: 74,
+  },
   sectionHeader: {
     flexDirection:  'row',
     justifyContent: 'space-between',
@@ -298,7 +317,7 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex:            1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(23,25,31,0.34)',
     justifyContent:  'flex-end',
   },
   centeredModalOverlay: {
@@ -320,6 +339,11 @@ const styles = StyleSheet.create({
     maxHeight:       '85%',
     borderTopWidth:  1,
     borderColor:     colors.border,
+    shadowColor:     '#1d2740',
+    shadowOffset:    { width: 0, height: -6 },
+    shadowOpacity:   0.08,
+    shadowRadius:    24,
+    elevation:       8,
   },
   dialogSheet: {
     width:          '100%',

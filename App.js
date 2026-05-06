@@ -145,7 +145,7 @@ export default function App() {
   if (!profile) {
     return (
       <SafeAreaProvider>
-        <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
+        <StatusBar barStyle="dark-content" backgroundColor={colors.bg} />
         <AuthScreen onLogin={setProfile} />
       </SafeAreaProvider>
     );
@@ -153,22 +153,42 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
+      <StatusBar barStyle="dark-content" backgroundColor={colors.bg} />
       <NavigationContainer theme={{ colors: { background: colors.bg } }}>
         <Tab.Navigator
           screenOptions={({ route }) => ({
-            headerStyle: { backgroundColor: colors.surface, borderBottomColor: colors.border, borderBottomWidth: 1 },
+            sceneStyle: { backgroundColor: colors.bg },
+            headerStyle: {
+              backgroundColor: colors.surface,
+              borderBottomColor: colors.border,
+              borderBottomWidth: 1,
+              shadowColor: '#3452f4',
+              shadowOffset: { width: 0, height: 6 },
+              shadowOpacity: 0.05,
+              shadowRadius: 18,
+              elevation: 2,
+            },
             headerTintColor: colors.text,
             headerTitleStyle,
             headerLeft: () => <HeaderLogo />,
             headerLeftContainerStyle: styles.headerLeftContainer,
             tabBarStyle: {
+              position: 'absolute',
+              left: 16,
+              right: 16,
+              bottom: 14,
               backgroundColor: colors.surface,
               borderTopColor: colors.border,
               borderTopWidth: 1,
-              height: 82,
+              borderRadius: 26,
+              height: 78,
               paddingTop: 8,
               paddingBottom: 12,
+              shadowColor: '#3452f4',
+              shadowOffset: { width: 0, height: 12 },
+              shadowOpacity: 0.1,
+              shadowRadius: 24,
+              elevation: 10,
             },
             tabBarActiveTintColor: colors.accent,
             tabBarInactiveTintColor: colors.textMuted,
@@ -221,18 +241,23 @@ const styles = StyleSheet.create({
   bootLogoFrame: {
     width: 124,
     height: 124,
-    borderRadius: 28,
-    padding: 6,
+    borderRadius: 36,
+    padding: 12,
     marginBottom: 20,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
     overflow: 'hidden',
+    shadowColor: '#3452f4',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.12,
+    shadowRadius: 30,
+    elevation: 6,
   },
   bootLogoImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 22,
+    borderRadius: 24,
   },
   bootTitle: {
     fontSize: 40,
@@ -245,9 +270,9 @@ const styles = StyleSheet.create({
   headerLogoFrame: {
     width: 34,
     height: 34,
-    borderRadius: 10,
-    padding: 2,
-    backgroundColor: colors.bg,
+    borderRadius: 12,
+    padding: 3,
+    backgroundColor: colors.surfaceAlt,
     borderWidth: 1,
     borderColor: colors.border,
     overflow: 'hidden',

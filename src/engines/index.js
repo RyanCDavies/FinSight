@@ -35,6 +35,129 @@ function inferDirectionHints(text, amount) {
   return score;
 }
 
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function monthKeyFromDate(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function parseMonthKey(monthKey) {
+  const [year, month] = String(monthKey || '').split('-').map(Number);
+  if (!year || !month) return null;
+  return new Date(year, month - 1, 1);
+}
+
+function addMonths(date, count) {
+  return new Date(date.getFullYear(), date.getMonth() + count, 1);
+}
+
+function average(values) {
+  if (!values.length) return 0;
+  return values.reduce((left, right) => left + right, 0) / values.length;
+}
+
+function standardDeviation(values, mean = average(values)) {
+  if (!values.length) return 0;
+  const variance = values
+    .map((value) => (value - mean) ** 2)
+    .reduce((left, right) => left + right, 0) / values.length;
+  return Math.sqrt(variance);
+}
+
+function averageMonthGap(monthKeys) {
+  if (monthKeys.length < 2) return 1;
+  let totalGap = 0;
+
+  for (let index = 1; index < monthKeys.length; index += 1) {
+    const previous = parseMonthKey(monthKeys[index - 1]);
+    const current = parseMonthKey(monthKeys[index]);
+    if (!previous || !current) continue;
+
+    totalGap += ((current.getFullYear() - previous.getFullYear()) * 12) + (current.getMonth() - previous.getMonth());
+  }
+
+  return totalGap / (monthKeys.length - 1);
+}
+
+function parseDateValue(value) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function averageDayGap(dates) {
+  if (dates.length < 2) return 0;
+  const intervals = dates.slice(1).map((date, index) => (
+    (date - dates[index]) / 86400000
+  ));
+  return average(intervals);
+}
+
+function median(values) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[middle - 1] + sorted[middle]) / 2
+    : sorted[middle];
+}
+
+function normalizeMerchantKey(merchant) {
+  return String(merchant || '')
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, ' ')
+    .replace(/\b(inc|llc|corp|corporation|company|co|ltd|online|com|www|payment|debit|card|purchase|pos)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function titleCaseWords(value) {
+  return String(value || '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+function mostCommonValue(values) {
+  const counts = new Map();
+  values.forEach((value) => {
+    const key = String(value || '').trim();
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  return Array.from(counts.entries()).sort((left, right) => right[1] - left[1])[0]?.[0] || '';
+}
+
+function detectCadence(intervals) {
+  if (!intervals.length) return null;
+
+  const medianInterval = median(intervals);
+  const intervalStd = standardDeviation(intervals, average(intervals));
+  const cadenceOptions = [
+    { frequency: 'weekly', target: 7, min: 5, max: 9, maxStd: 1.8, minCount: 3, badge: '/wk' },
+    { frequency: 'monthly', target: 30.4, min: 26, max: 34, maxStd: 4.5, minCount: 2, badge: '/mo' },
+  ];
+
+  return cadenceOptions.find((option) => (
+    medianInterval >= option.min &&
+    medianInterval <= option.max &&
+    intervalStd <= option.maxStd &&
+    intervals.length >= option.minCount
+  )) || null;
+}
+
+function buildZombieReason({ cadence, averageAmount, count, cadenceScore, amountScore }) {
+  const reasons = [];
+  reasons.push(`${cadence.frequency} charge pattern`);
+  if (amountScore > 0.8) reasons.push('very consistent amount');
+  if (count >= 6) reasons.push('long-running');
+  if (averageAmount <= 30) reasons.push('low-dollar charge that is easy to miss');
+  if (cadenceScore > 0.85) reasons.push('highly regular billing cadence');
+  return reasons.join(', ');
+}
+
 // Transaction Categorization Engine
 // Keyword and transaction-shape heuristics with explicit category matching.
 export const CategorizationEngine = {
@@ -153,7 +276,7 @@ export const AnomalyDetectionEngine = {
 };
 
 // Forecasting Engine
-// Lightweight monthly trend estimation per category.
+// Chronological monthly spend forecasting with recency, seasonality, and capped trend adjustment.
 export const ForecastingEngine = {
   forecast(transactions, categoryId, monthsAhead = 1) {
     const filtered = transactions.filter(
@@ -164,18 +287,78 @@ export const ForecastingEngine = {
     const byMonth = {};
     filtered.forEach((transaction) => {
       const key = (transaction.date || '').slice(0, 7);
+      if (!key || key.length !== 7) return;
       if (!byMonth[key]) byMonth[key] = 0;
       byMonth[key] += Math.abs(parseFloat(transaction.amount));
     });
 
-    const values = Object.values(byMonth).sort((left, right) => left - right);
-    const avg = values.reduce((left, right) => left + right, 0) / values.length;
-    const trend = values.length > 1 ? (values[values.length - 1] - values[0]) / values.length : 0;
-    const predicted = avg + trend * monthsAhead;
-    const variance = values.map((value) => (value - avg) ** 2).reduce((left, right) => left + right, 0) / values.length;
-    const confidence = Math.max(0.5, Math.min(0.95, 1 - Math.sqrt(variance) / (avg || 1)));
+    let monthKeys = Object.keys(byMonth).sort();
+    if (!monthKeys.length) return null;
 
-    return { predicted: Math.max(0, predicted), confidence };
+    const now = new Date();
+    const currentMonthKey = monthKeyFromDate(now);
+    if (monthKeys.length > 1 && monthKeys[monthKeys.length - 1] === currentMonthKey) {
+      monthKeys = monthKeys.slice(0, -1);
+    }
+    if (monthKeys.length < 3) return null;
+
+    const monthlyTotals = monthKeys.map((key) => byMonth[key]);
+    const recent3 = monthlyTotals.slice(-3);
+    const recent12 = monthlyTotals.slice(-12);
+    const recent6 = monthlyTotals.slice(-6);
+    const targetDate = addMonths(new Date(now.getFullYear(), now.getMonth(), 1), monthsAhead);
+    const targetMonthNumber = targetDate.getMonth();
+    const sameMonthPriorYears = monthKeys
+      .filter((key) => {
+        const parsed = parseMonthKey(key);
+        return parsed && parsed.getMonth() === targetMonthNumber;
+      })
+      .map((key) => byMonth[key]);
+
+    const recent3Avg = average(recent3);
+    const recent12Avg = average(recent12);
+    const seasonalAvg = sameMonthPriorYears.length ? average(sameMonthPriorYears) : recent12Avg;
+
+    const baseForecast = (
+      recent3Avg * 0.45 +
+      recent12Avg * 0.30 +
+      seasonalAvg * 0.25
+    );
+
+    const trendSlope = recent6.length > 1
+      ? (recent6[recent6.length - 1] - recent6[0]) / (recent6.length - 1)
+      : 0;
+    const rawTrendAdjustment = trendSlope * Math.max(1, monthsAhead);
+    const cappedTrendAdjustment = clamp(rawTrendAdjustment, -baseForecast * 0.2, baseForecast * 0.2);
+    const predicted = Math.max(0, baseForecast + cappedTrendAdjustment);
+
+    const overallAvg = average(monthlyTotals);
+    const volatility = standardDeviation(monthlyTotals, overallAvg) / (overallAvg || 1);
+    const coverageScore = clamp(monthlyTotals.length / 12, 0, 1);
+    const stabilityScore = clamp(1 - volatility, 0, 1);
+    const seasonalityScore = clamp(sameMonthPriorYears.length / 3, 0, 1);
+    const continuityScore = clamp(1 / averageMonthGap(monthKeys), 0, 1);
+    const confidence = clamp(
+      0.35 +
+      coverageScore * 0.25 +
+      stabilityScore * 0.2 +
+      seasonalityScore * 0.1 +
+      continuityScore * 0.1,
+      0.5,
+      0.95
+    );
+
+    return {
+      predicted,
+      confidence,
+      components: {
+        recent3Avg,
+        recent12Avg,
+        seasonalAvg,
+        trendAdjustment: cappedTrendAdjustment,
+        historyMonths: monthKeys.length,
+      },
+    };
   },
 };
 
@@ -236,50 +419,91 @@ export const RecommendationEngine = {
 };
 
 // Subscription Detection Engine
-// Detects recurring same-amount merchant charges.
+// Detects likely active recurring charges and ranks those most likely to be forgotten "zombie" subscriptions.
 export const SubscriptionEngine = {
   detect(transactions) {
-    const excludedCategories = ['cat_income', 'cat_food', 'cat_transport'];
+    const excludedCategories = ['cat_income', 'cat_food', 'cat_transport', 'cat_rent', 'cat_utilities'];
     const merchants = {};
+    const now = new Date();
 
     transactions.forEach((transaction) => {
       const amount = parseFloat(transaction.amount);
       if (amount >= 0) return;
       if (excludedCategories.includes(transaction.category_id)) return;
 
-      const key = (transaction.merchant || '').toLowerCase().trim();
-      if (!merchants[key]) merchants[key] = { amounts: [], dates: [] };
-      merchants[key].amounts.push(amount);
+      const key = normalizeMerchantKey(transaction.merchant);
+      if (!key) return;
+
+      if (!merchants[key]) {
+        merchants[key] = {
+          amounts: [],
+          dates: [],
+          merchants: [],
+        };
+      }
+
+      merchants[key].amounts.push(Math.abs(amount));
       merchants[key].dates.push(transaction.date);
+      merchants[key].merchants.push(transaction.merchant);
     });
 
     const subscriptions = [];
     Object.entries(merchants).forEach(([merchant, data]) => {
-      if (data.amounts.length < 2) return;
+      if (data.amounts.length < 3) return;
 
-      const allSame = data.amounts.every((amount) => Math.abs(amount - data.amounts[0]) < 0.01);
-      const sortedDates = [...data.dates].filter(Boolean).sort();
-      if (sortedDates.length < 2) return;
+      const sortedDates = data.dates
+        .map(parseDateValue)
+        .filter(Boolean)
+        .sort((left, right) => left - right);
+      if (sortedDates.length < 3) return;
 
-      const intervals = sortedDates.slice(1).map((date, index) =>
-        (new Date(date) - new Date(sortedDates[index])) / (1000 * 60 * 60 * 24)
+      const intervals = sortedDates.slice(1).map((date, index) => (
+        (date - sortedDates[index]) / 86400000
+      ));
+      const cadence = detectCadence(intervals);
+      if (!cadence) return;
+
+      const averageAmount = average(data.amounts);
+      const amountStd = standardDeviation(data.amounts, averageAmount);
+      const relativeAmountStd = amountStd / (averageAmount || 1);
+      const amountScore = clamp(1 - (relativeAmountStd / 0.18), 0, 1);
+      if (amountScore < 0.45) return;
+
+      const intervalStd = standardDeviation(intervals, average(intervals));
+      const cadenceScore = clamp(1 - (intervalStd / cadence.maxStd), 0, 1);
+      const countScore = clamp(data.amounts.length / 8, 0, 1);
+      const stealthScore = averageAmount <= 20 ? 1 : averageAmount <= 50 ? 0.85 : averageAmount <= 100 ? 0.6 : 0.35;
+      const recencyDays = (now - sortedDates[sortedDates.length - 1]) / 86400000;
+      const activeWindowDays = cadence.frequency === 'monthly' ? 50 : 16;
+      if (recencyDays > activeWindowDays) return;
+      const recencyScore = clamp(1 - (recencyDays / activeWindowDays), 0, 1);
+
+      const zombieScore = clamp(
+        cadenceScore * 0.3 +
+        amountScore * 0.25 +
+        countScore * 0.2 +
+        stealthScore * 0.15 +
+        recencyScore * 0.1,
+        0,
+        1
       );
-      const avgInterval = intervals.reduce((left, right) => left + right, 0) / intervals.length;
+      if (zombieScore < 0.58) return;
 
-      const isMonthly = avgInterval > 25 && avgInterval < 35;
-      const isWeekly = avgInterval > 6 && avgInterval < 8;
-
-      if (allSame && (isMonthly || isWeekly)) {
-        subscriptions.push({
-          merchant,
-          amount: data.amounts[0],
-          frequency: isMonthly ? 'monthly' : 'weekly',
-          last_seen: sortedDates[sortedDates.length - 1],
-          count: data.amounts.length,
-        });
-      }
+      const displayMerchant = mostCommonValue(data.merchants) || titleCaseWords(merchant);
+      subscriptions.push({
+        merchant: displayMerchant,
+        amount: -averageAmount,
+        frequency: cadence.frequency,
+        billing_suffix: cadence.badge,
+        last_seen: sortedDates[sortedDates.length - 1].toISOString(),
+        count: data.amounts.length,
+        zombie_score: zombieScore,
+        confidence: clamp(0.45 + zombieScore * 0.45, 0.5, 0.95),
+        reason: buildZombieReason({ cadence, averageAmount, count: data.amounts.length, cadenceScore, amountScore }),
+      });
     });
 
-    return subscriptions;
+    return subscriptions
+      .sort((left, right) => right.zombie_score - left.zombie_score || right.count - left.count);
   },
 };
