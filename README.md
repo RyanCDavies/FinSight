@@ -27,21 +27,21 @@ This repository is prepared for final course submission and includes the applica
 
 ## Repository Contents
 
-- [App.js](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/App.js): application entry point and navigation shell
-- [src](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/src): app screens, services, database helpers, platform integrations, and AI runtime code
-- [assets](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/assets): icons and bundled visual assets
-- [windows](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/windows): native Windows solution and C++ bridge modules
-- [documentation](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/documentation): project documentation and supporting deliverables
+- [App.js](./App.js): application entry point and navigation shell
+- [src](./src): app screens, services, database helpers, platform integrations, and AI runtime code
+- [assets](./assets): icons and bundled visual assets
+- [windows](./windows): native Windows solution and C++ bridge modules
+- [documentation](./documentation): project documentation and supporting deliverables
 
 ## Included Documentation
 
-The [documentation](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/documentation) folder contains project artifacts used during development and submission, including:
+The [documentation](./documentation) folder contains project artifacts used during development and submission, including:
 
-- [index.html](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/documentation/index.html)
-- [storyboard.html](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/documentation/storyboard.html)
-- [FinSight_SRS.docx](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/documentation/FinSight_SRS.docx)
-- [FinSight Business Plan.docx](</C:/Users/krank/Documents/CPP Classes/4800/finsight-expo/documentation/FinSight Business Plan.docx>)
-- [Windows_Local_LLM_Runtime.md](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/documentation/Windows_Local_LLM_Runtime.md)
+- [index.html](./documentation/index.html)
+- [storyboard.html](./documentation/storyboard.html)
+- [FinSight_SRS.docx](./documentation/FinSight_SRS.docx)
+- [FinSight Business Plan.docx](./documentation/FinSight%20Business%20Plan.docx)
+- [Windows_Local_LLM_Runtime.md](./documentation/Windows_Local_LLM_Runtime.md)
 
 ## Installation
 
@@ -131,9 +131,9 @@ npm run test:windows:native
 
 ## Windows Build Notes
 
-- The Windows solution is [windows/finsight.sln](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/windows/finsight.sln).
-- NuGet sources are configured in [NuGet.config](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/NuGet.config).
-- Native Windows implementation files live under [windows/finsight](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/windows/finsight).
+- The Windows solution is [windows/finsight.sln](./windows/finsight.sln).
+- NuGet sources are configured in [NuGet.config](./NuGet.config).
+- Native Windows implementation files live under [windows/finsight](./windows/finsight).
 
 If a Windows build fails, verify:
 
@@ -147,10 +147,10 @@ If a Windows build fails, verify:
 
 FinSight includes a Windows-native local AI scaffold intended for private, on-device assistant functionality. The current implementation supports local model configuration and Windows integration work, but a full ONNX Runtime GenAI setup is still required for complete local model execution.
 
-See [Windows_Local_LLM_Runtime.md](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/documentation/Windows_Local_LLM_Runtime.md) for details.
+See [Windows_Local_LLM_Runtime.md](./documentation/Windows_Local_LLM_Runtime.md) for details.
 
 ## Submission Notes
 
 - Source code for the app, Windows target, and supporting assets is included in this repository.
 - Supporting design and documentation artifacts are included in the `documentation` folder.
-- Generated dependencies and local build outputs should not be committed; see [.gitignore](/C:/Users/krank/Documents/CPP%20Classes/4800/finsight-expo/.gitignore).
+- Generated dependencies and local build outputs should not be committed; see [.gitignore](./.gitignore).
