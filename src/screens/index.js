@@ -537,7 +537,7 @@ export function DashboardScreen({ profile, navigation }) {
       {/* Forecasts */}
       {forecasts.length > 0 && (
         <Card style={styles.sectionCard}>
-          <SectionHeader title="📈 Spending Forecast" />
+          <SectionHeader title="Spending Forecast" />
           <View style={styles.forecastGrid}>
             {forecasts.slice(0, 4).map(({ category, forecast }) => (
               <View key={category.id} style={styles.forecastCell}>
@@ -591,7 +591,7 @@ export function DashboardScreen({ profile, navigation }) {
       {/* Zombie Subscriptions */}
       {subscriptions.length > 0 && (
         <Card style={styles.sectionCard}>
-          <SectionHeader title="🧟 Zombie Subscriptions" />
+          <SectionHeader title="Zombie Subscriptions" />
           {subscriptions.slice(0, 3).map((s, i) => (
             <React.Fragment key={i}>
               <View style={styles.subRow}>
@@ -635,7 +635,7 @@ export function DashboardScreen({ profile, navigation }) {
       {/* AI Insights */}
       {recommendations.length > 0 && (
         <Card style={styles.sectionCard}>
-          <SectionHeader title="💡 AI Insights" />
+          <SectionHeader title="AI Insights" />
           {recommendations.map((rec, i) => (
             <View key={i} style={[styles.recRow, i < recommendations.length - 1 && styles.divider]}>
               <Text style={{ fontSize: 18 }}>{rec.icon}</Text>
@@ -1535,6 +1535,34 @@ export function BudgetManagerScreen({ profile }) {
 // AI Assistant Screen
 // ─────────────────────────────────────────────
 
+// Strips prompt bleed-through from LLM output. The local model sometimes
+// continues generating the few-shot prompt template instead of stopping after
+// its answer — this cuts off anything that looks like a new prompt turn.
+function sanitizeAssistantResponse(text) {
+  if (!text || typeof text !== 'string') return text;
+
+  // Patterns that signal the model has started echoing the prompt template
+  const cutoffPatterns = [
+    /\bUSER QUESTION\b/i,
+    /\bUSER:\s/i,
+    /\bHuman:\s/i,
+    /\bAssistant:\s/i,
+    // Second occurrence of "FinSight:" means the model is roleplaying the next turn
+    /FinSight:/i,
+  ];
+
+  let result = text;
+  for (const pattern of cutoffPatterns) {
+    const match = result.search(pattern);
+    if (match > 0) {
+      // Only cut if the match isn't right at the start (first word of the reply)
+      result = result.slice(0, match).trimEnd();
+    }
+  }
+
+  return result || text;
+}
+
 export function AssistantScreen({ profile }) {
   const assistantSession = getAssistantSession(profile.id);
   const [messages, setMessages] = useState(assistantSession.messages);
@@ -1603,6 +1631,9 @@ export function AssistantScreen({ profile }) {
     return () => {
       activeScreenRef.current = false;
       releaseAssistantUiWork();
+      // Tell the runtime to stop generating — prevents the model from continuing
+      // to run in the background and bleeding prompt text into the output buffer.
+      LocalAIService.cancelActiveGeneration().catch(() => {});
     };
   }, [profile.id, refreshAssistantStatus, releaseAssistantUiWork]));
 
@@ -1665,8 +1696,9 @@ export function AssistantScreen({ profile }) {
         const latestSession = getAssistantSession(profile.id);
         if ((latestSession.generationId || 0) !== generationId) return;
 
+        const cleanedPartial = sanitizeAssistantResponse(partial);
         const resolvedMessages = latestSession.messages.map((msg, i) => (
-          i === latestSession.messages.length - 1 ? { ...msg, text: partial } : msg
+          i === latestSession.messages.length - 1 ? { ...msg, text: cleanedPartial } : msg
         ));
         // Always update the session store so returning to tab shows latest text
         latestSession.messages = resolvedMessages;

@@ -679,6 +679,14 @@ export const LocalAIService = {
         userPrompt: message,
         fullContext: context,
         conversationHistory,
+        stopSequences: [
+          'USER QUESTION',
+          'USER:',
+          'Human:',
+          'Assistant:',
+          '\nFinSight:',
+          '\nUser:',
+        ],
       });
       const answer = String(result.text || buildFallbackAnswer(message, context)).trim();
       onChunk?.(answer);
