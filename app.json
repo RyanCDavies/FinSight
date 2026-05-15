@@ -18,7 +18,21 @@
       "adaptiveIcon": {
         "backgroundColor": "#0a0e1a"
       },
-      "package": "com.finsight.app"
+      "package": "com.finsight.app",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "finsight"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
     },
     "plugins": [
       "expo-dev-client",

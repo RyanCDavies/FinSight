@@ -37,11 +37,16 @@ This repository is prepared for final course submission and includes the applica
 
 The [documentation](./documentation) folder contains project artifacts used during development and submission, including:
 
-- [index.html](./documentation/index.html)
-- [storyboard.html](./documentation/storyboard.html)
-- [FinSight_SRS.docx](./documentation/FinSight_SRS.docx)
-- [FinSight Business Plan.docx](./documentation/FinSight%20Business%20Plan.docx)
-- [Windows_Local_LLM_Runtime.md](./documentation/Windows_Local_LLM_Runtime.md)
+- [Functional_Requirements_Spec.docx](./documentation/Functional_Requirements_Spec.docx)
+- [Project_Charter.docx](./documentation/Project_Charter.docx)
+- [Deliverables_Checklist.md](./documentation/Deliverables_Checklist.md)
+- [Functional_Requirements_Spec.md](./documentation/Functional_Requirements_Spec.md)
+- [Technical_Design_Spec.md](./documentation/Technical_Design_Spec.md)
+- [Test_Case_Spec.md](./documentation/Test_Case_Spec.md)
+- [Build_and_Deployment_Instructions.md](./documentation/Build_and_Deployment_Instructions.md)
+- [Release_Notes.md](./documentation/Release_Notes.md)
+
+Supporting development artifacts that are not part of the core deliverable set were moved to [documentation/supporting_artifacts](./documentation/supporting_artifacts).
 
 ## Installation
 

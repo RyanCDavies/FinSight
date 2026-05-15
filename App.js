@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Platform, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, LogBox, Platform, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -20,6 +20,13 @@ const Tab = createBottomTabNavigator();
 const isWindows = Platform.OS === 'windows';
 const appIcon = require('./assets/icon.png');
 const headerIcon = require('./assets/ico.png');
+
+if (__DEV__ && isWindows) {
+  // React Native Windows surfaces a generic warning banner that points to the
+  // developer console. Suppress dev-only LogBox popups on Windows.
+  LogBox.ignoreAllLogs();
+}
+
 const headerTitleStyle = isWindows
   ? { fontSize: 18 }
   : { fontFamily: 'SpaceGrotesk_700Bold', fontSize: 18 };
